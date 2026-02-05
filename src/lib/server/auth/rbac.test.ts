@@ -1,12 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-	requireRole,
-	hasGlobalScope,
-	canWrite,
-	canManage,
-	canApprove,
-	type Role
-} from './rbac';
+import { requireRole, hasGlobalScope, canWrite, canManage, canApprove } from './rbac';
 
 describe('RBAC helpers', () => {
 	describe('requireRole', () => {

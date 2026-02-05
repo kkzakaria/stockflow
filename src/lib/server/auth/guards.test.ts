@@ -7,7 +7,17 @@ describe('requireAuth', () => {
 	});
 
 	it('should return user when authenticated', () => {
-		const mockUser = { id: '123', role: 'admin', name: 'Test', email: 'test@test.com' };
-		expect(requireAuth(mockUser as any)).toEqual(mockUser);
+		const mockUser = {
+			id: '123',
+			role: 'admin',
+			name: 'Test',
+			email: 'test@test.com',
+			emailVerified: false,
+			createdAt: new Date(),
+			updatedAt: new Date(),
+			image: null,
+			isActive: true
+		};
+		expect(requireAuth(mockUser)).toEqual(mockUser);
 	});
 });

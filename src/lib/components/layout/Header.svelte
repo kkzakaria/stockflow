@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 
 	const { userName }: { userName: string } = $props();
 
@@ -8,7 +9,7 @@
 
 	async function handleLogout() {
 		await authClient.signOut();
-		goto('/login');
+		goto(resolve('/login'));
 	}
 </script>
 
@@ -18,7 +19,7 @@
 	</div>
 
 	<div class="flex items-center gap-4">
-		<a href="/alerts" class="relative text-gray-500 hover:text-gray-700">
+		<a href={resolve('/alerts')} class="relative text-gray-500 hover:text-gray-700">
 			<span class="text-xl">🔔</span>
 		</a>
 
@@ -37,7 +38,10 @@
 				<div
 					class="absolute right-0 mt-2 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-gray-200"
 				>
-					<a href="/settings" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+					<a
+						href={resolve('/settings')}
+						class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+					>
 						Paramètres
 					</a>
 					<button

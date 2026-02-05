@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 
 	type NavItem = { label: string; href: string; icon: string; minRole?: string };
 
@@ -14,7 +15,7 @@
 		viewer: 10
 	};
 
-	const navItems: NavItem[] = [
+	const navItems = [
 		{ label: 'Dashboard', href: '/dashboard', icon: '📊' },
 		{ label: 'Produits', href: '/products', icon: '📦' },
 		{ label: 'Entrepôts', href: '/warehouses', icon: '🏭' },
@@ -25,7 +26,7 @@
 		{ label: 'Logs', href: '/logs', icon: '📄', minRole: 'admin_viewer' },
 		{ label: 'Utilisateurs', href: '/users', icon: '👥', minRole: 'admin' },
 		{ label: 'Paramètres', href: '/settings', icon: '⚙️' }
-	];
+	] as const;
 
 	function isVisible(item: NavItem): boolean {
 		if (!item.minRole) return true;
@@ -44,7 +45,7 @@
 	<nav class="mt-2 space-y-1 px-2">
 		{#each navItems.filter(isVisible) as item (item.href)}
 			<a
-				href={item.href}
+				href={resolve(item.href)}
 				class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors
 					{isActive(item.href) ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}"
 			>

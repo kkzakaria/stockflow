@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { authClient } from '$lib/auth-client';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 
 	let email = $state('');
 	let password = $state('');
@@ -18,7 +19,7 @@
 			if (result.error) {
 				errorMsg = result.error.message ?? 'Identifiants incorrects';
 			} else {
-				goto('/dashboard');
+				goto(resolve('/dashboard'));
 			}
 		} catch {
 			errorMsg = 'Erreur de connexion. Réessayez.';
@@ -72,6 +73,7 @@
 	</button>
 
 	<div class="mt-4 text-center">
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- route not yet created -->
 		<a href="/forgot-password" class="text-sm text-blue-600 hover:underline">
 			Mot de passe oublié ?
 		</a>
