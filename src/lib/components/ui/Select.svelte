@@ -8,14 +8,7 @@
 		children: Snippet;
 	}
 
-	let {
-		label,
-		error,
-		id,
-		class: className = '',
-		children,
-		...rest
-	}: Props = $props();
+	let { label, error, id, class: className = '', children, ...rest }: Props = $props();
 
 	const fallbackId = `select-${Math.random().toString(36).slice(2, 9)}`;
 	const selectId = $derived(id ?? fallbackId);
@@ -30,7 +23,7 @@
 
 	<select
 		id={selectId}
-		class="w-full rounded-md border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0
+		class="w-full rounded-md border px-3 py-2 text-sm transition-colors focus:ring-2 focus:ring-offset-0 focus:outline-none
 			{error
 			? 'border-red-300 focus:border-red-500 focus:ring-red-500'
 			: 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}

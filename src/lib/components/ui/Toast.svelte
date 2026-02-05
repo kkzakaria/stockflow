@@ -16,7 +16,7 @@
 	};
 </script>
 
-<div class="fixed right-4 top-4 z-50 flex flex-col gap-2">
+<div class="fixed top-4 right-4 z-50 flex flex-col gap-2">
 	{#each $toast as t (t.id)}
 		<div
 			class="flex items-center gap-2 rounded-lg border px-4 py-3 shadow-lg {colorByType[t.type]}"

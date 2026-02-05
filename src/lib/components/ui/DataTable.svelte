@@ -15,12 +15,7 @@
 		onrowclick?: (item: T) => void;
 	}
 
-	let {
-		data,
-		columns,
-		emptyMessage = 'Aucune donnee',
-		onrowclick
-	}: Props<T> = $props();
+	let { data, columns, emptyMessage = 'Aucune donnee', onrowclick }: Props<T> = $props();
 
 	function getValue(item: T, key: keyof T | string): unknown {
 		if (typeof key === 'string' && key.includes('.')) {
@@ -44,7 +39,7 @@
 				<tr>
 					{#each columns as col (col.key)}
 						<th
-							class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 {col.class ??
+							class="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase {col.class ??
 								''}"
 						>
 							{col.label}
@@ -54,15 +49,12 @@
 			</thead>
 			<tbody class="divide-y divide-gray-200">
 				{#each data as item, i (i)}
-					<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 					<tr
 						class={onrowclick ? 'cursor-pointer hover:bg-gray-50' : ''}
 						onclick={() => onrowclick?.(item)}
 					>
 						{#each columns as col (col.key)}
-							<td
-								class="whitespace-nowrap px-4 py-3 text-sm text-gray-900 {col.class ?? ''}"
-							>
+							<td class="px-4 py-3 text-sm whitespace-nowrap text-gray-900 {col.class ?? ''}">
 								{#if col.render}
 									{@render col.render(item)}
 								{:else}
