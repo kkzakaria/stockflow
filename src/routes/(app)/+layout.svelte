@@ -2,9 +2,12 @@
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import Header from '$lib/components/layout/Header.svelte';
 	import BottomNav from '$lib/components/layout/BottomNav.svelte';
+	import { Toast } from '$lib/components/ui';
 
 	let { data, children } = $props();
 </script>
+
+<Toast />
 
 <div class="flex h-screen bg-gray-50">
 	<Sidebar role={data.user.role ?? 'viewer'} />
