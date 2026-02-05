@@ -67,10 +67,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	// Set the role (Better Auth creates with default)
 	if (parsed.data.role && parsed.data.role !== 'viewer') {
-		await db
-			.update(user)
-			.set({ role: parsed.data.role })
-			.where(eq(user.id, result.user.id));
+		await db.update(user).set({ role: parsed.data.role }).where(eq(user.id, result.user.id));
 	}
 
 	return json(

@@ -20,10 +20,7 @@ export async function requireWarehouseAccess(
 	if (hasGlobalScope(role)) return;
 
 	const access = await db.query.userWarehouses.findFirst({
-		where: and(
-			eq(userWarehouses.userId, userId),
-			eq(userWarehouses.warehouseId, warehouseId)
-		)
+		where: and(eq(userWarehouses.userId, userId), eq(userWarehouses.warehouseId, warehouseId))
 	});
 
 	if (!access) {

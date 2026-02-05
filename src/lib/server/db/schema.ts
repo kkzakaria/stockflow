@@ -310,10 +310,7 @@ export const alerts = sqliteTable(
 		createdAt: createdAt(),
 		readAt: text('read_at')
 	},
-	(table) => [
-		index('idx_alerts_user').on(table.userId),
-		index('idx_alerts_read').on(table.isRead)
-	]
+	(table) => [index('idx_alerts_user').on(table.userId), index('idx_alerts_read').on(table.isRead)]
 );
 
 export const auditLogs = sqliteTable(
