@@ -2,116 +2,208 @@
 
 ## Vue d'ensemble
 
-Cette PR pose les fondations du projet StockFlow : schéma DB complet (16 tables), authentification via Better Auth, système RBAC à 6 rôles, endpoints API CRUD (users + warehouses), et UI de base (layout responsive avec sidebar/header/bottom nav, page de login).
+Cette PR pose les fondations du projet StockFlow : schéma DB (16 tables), authentification via Better Auth, système RBAC à 6 rôles, endpoints API CRUD (users + warehouses), bibliothèque de composants UI, pages CRUD complètes (users + warehouses), et layout responsive.
 
-**16 commits**, **60 fichiers modifiés**, **~13 800 ajouts**.
+**22 commits**, **~88 fichiers modifiés**, **~15 600 ajouts**.
 
 ---
 
 ## Points positifs
 
-- **Schéma DB bien structuré** : Relations Drizzle propres, indexes pertinents (sur les FK, les filtres fréquents), utilisation correcte de `onDelete: cascade`.
-- **RBAC bien pensé** : Hiérarchie de rôles claire avec séparation global scope / warehouse scope. Les helpers (`canWrite`, `canManage`, `canApprove`, `hasGlobalScope`) sont simples et testés.
-- **Soft delete** sur users et warehouses — bonne pratique pour un système de gestion de stock.
+- **Schéma DB bien structuré** : Relations Drizzle propres, indexes pertinents, `onDelete: cascade`.
+- **RBAC bien pensé** : Hiérarchie de rôles claire avec séparation global scope / warehouse scope.
+- **Soft delete** sur users et warehouses — bonne pratique.
 - **Validation Zod** côté serveur sur tous les endpoints.
-- **Garde d'accès warehouse** : `requireWarehouseAccess` vérifie correctement l'accès par entrepôt pour les rôles non-globaux.
-- **Tests unitaires** pour RBAC et guards — couverture de base correcte.
+- **Bibliothèque UI complète** : 11 composants réutilisables (Button, Modal, DataTable, Toast, etc.).
+- **Pages CRUD fonctionnelles** : Users et Warehouses avec formulaires de création, édition, détail.
 - **Layout responsive** avec sidebar desktop + bottom nav mobile.
+- **Toast store** avec helpers typés (`toast.success()`, `toast.error()`).
 
 ---
 
-## Problèmes à corriger
+## Problèmes critiques (bloquants)
 
-### 1. [Critique] `db/index.ts` utilise `better-sqlite3` au lieu de D1
+### 1. [CRITIQUE] Escalade de privilèges — `role` avec `input: true` dans auth.ts
+
+```ts
+// src/lib/server/auth.ts
+role: {
+    type: 'string',
+    required: false,
+    defaultValue: 'viewer',
+    input: true  // ⚠️ DANGEREUX
+}
+```
+
+Avec `input: true`, **n'importe quel utilisateur peut s'enregistrer comme `admin`** en incluant `role: "admin"` dans le body de la requête d'inscription. C'est une vulnérabilité d'escalade de privilèges.
+
+**Fix** : Mettre `input: false`. Les changements de rôle doivent passer par un endpoint admin dédié.
+
+### 2. [CRITIQUE] `better-sqlite3` incompatible avec Cloudflare Workers — toujours pas corrigé
 
 ```ts
 // src/lib/server/db/index.ts
 import Database from 'better-sqlite3';
-const client = new Database(env.DATABASE_URL);
+const sqlite = new Database(env.DATABASE_URL);
 ```
 
-Le projet cible Cloudflare Workers (cf. `wrangler.jsonc`), mais `better-sqlite3` est un module natif Node.js qui **ne fonctionnera pas** en production sur Workers. Il faudrait utiliser **D1** avec `drizzle-orm/d1` et un binding Cloudflare, ou au minimum une configuration conditionnelle dev/prod.
+Le nouveau commit ajoute du monkey-patching sur le prototype de `Statement` pour contourner les incompatibilités de type avec Better Auth, mais le problème fondamental reste : `better-sqlite3` est un module natif Node.js qui **crashera au déploiement** sur Workers.
 
-### 2. [Critique] Filtrage GET users cassé — les conditions `where` s'écrasent
+De plus, le monkey-patching :
+- Mutate globalement le prototype de tous les `Statement`
+- Ne gère pas les structures imbriquées (tableaux de bind params)
+- Risque de corruption silencieuse si une colonne attend un timestamp integer
+
+### 3. [CRITIQUE] Filtrage GET users cassé — les `.where()` s'écrasent
 
 ```ts
-// src/routes/api/v1/users/+server.ts (GET)
-let query = db.select().from(user).$dynamic();
-if (roleFilter) {
-    query = query.where(eq(user.role, roleFilter as Role));
-}
-if (activeFilter !== null && activeFilter !== undefined) {
-    query = query.where(eq(user.isActive, activeFilter === 'true'));
-}
+// src/routes/api/v1/users/+server.ts
+if (roleFilter) query = query.where(eq(user.role, roleFilter as Role));
+if (activeFilter) query = query.where(eq(user.isActive, activeFilter === 'true'));
 ```
 
-**Problème** : Les deux `.where()` ne se combinent pas — le second écrase le premier. Il faudrait utiliser `and()` pour combiner les conditions, ou construire un tableau de conditions :
+Le second `.where()` écrase le premier. Utiliser `and()` pour combiner.
+
+### 4. [CRITIQUE] Requête stock leaks data inter-entrepôts
 
 ```ts
-const conditions = [];
-if (roleFilter) conditions.push(eq(user.role, roleFilter));
-if (activeFilter !== null) conditions.push(eq(user.isActive, activeFilter === 'true'));
-const users = await db.select().from(user).where(and(...conditions));
+// src/routes/(app)/warehouses/+page.server.ts
+const stockCounts = await db
+    .select({ warehouseId, productCount, totalQuantity, totalValue })
+    .from(productWarehouse)
+    .groupBy(productWarehouse.warehouseId); // ← Pas de WHERE sur les warehouses autorisés
 ```
 
-### 3. [Majeur] Pas de validation du `roleFilter` dans GET users
-
-Le paramètre `roleFilter` est casté directement en `Role` sans validation : `roleFilter as Role`. Un attaquant pourrait injecter n'importe quelle valeur. Valider avec le schéma Zod `ROLES`.
-
-### 4. [Majeur] `userWarehouses` n'a pas de clé primaire composite
-
-```ts
-export const userWarehouses = sqliteTable('user_warehouses', {
-    userId: text('user_id')...,
-    warehouseId: text('warehouse_id')...
-});
-```
-
-Il manque une clé primaire composite `(userId, warehouseId)` ou un `uniqueIndex` pour éviter les doublons d'assignation.
-
-### 5. [Majeur] `productWarehouse` n'a pas de clé primaire composite
-
-Même problème — pas de PK composite ni d'index unique sur `(productId, warehouseId)`.
-
-### 6. [Mineur] Champ `pump` dans `productWarehouse` non documenté
-
-```ts
-pump: real('pump').default(0),
-```
-
-Ce champ n'est référencé nulle part et son nom n'est pas explicite. S'il s'agit du PUMP (prix unitaire moyen pondéré / CUMP), le renommer en `averageCost` ou `cump` avec un commentaire.
+La requête récupère les données financières de **tous** les entrepôts, même ceux auxquels l'utilisateur n'a pas accès.
 
 ---
 
-## Suggestions d'amélioration
+## Problèmes majeurs
 
-### 7. `requireAuth` devrait vérifier `isActive`
+### 5. [MAJEUR] `foreign_keys = ON` manquant — les FK ne sont pas appliquées
 
-Actuellement, un utilisateur désactivé (`isActive: false`) peut toujours s'authentifier et accéder aux ressources. Ajouter une vérification dans `requireAuth` ou dans le hook `handleAuth`.
+SQLite désactive les clés étrangères par défaut. Sans `sqlite.pragma('foreign_keys = ON')`, toutes les contraintes FK définies dans le schéma sont **ignorées au niveau DB**.
 
-### 8. Header — le menu dropdown ne se ferme pas au clic extérieur
+### 6. [MAJEUR] `userWarehouses` et `productWarehouse` sans PK composite
 
-Il n'y a pas de gestion du clic en dehors du menu pour le fermer. Utiliser `use:clickOutside` ou un event listener sur `window`.
+Pas de clé primaire composite ni d'index unique — doublons possibles.
 
-### 9. Le `DELETE` warehouse ne vérifie pas les transferts en cours
+### 7. [MAJEUR] `locals.user!` — assertion non-null sans garde
 
-Un entrepôt avec des transferts `pending` ou `shipped` pourrait être désactivé, causant des incohérences.
+Toutes les pages server utilisent `locals.user!.role as Role` au lieu de `requireAuth(locals.user)`. Si l'authentification échoue, on obtient un crash `TypeError` (500) au lieu d'un 401 propre. La fonction `requireAuth` existe dans `guards.ts` mais **n'est jamais utilisée** dans les pages.
 
-### 10. Manque de pagination sur les endpoints GET list
+### 8. [MAJEUR] `isActive` retiré de Better Auth mais toujours dans le schéma
 
-`GET /api/v1/users` et `GET /api/v1/warehouses` retournent tous les résultats sans pagination. À ajouter pour éviter des problèmes de performance.
+Le champ `isActive` a été supprimé de `auth.ts` mais reste dans `schema.ts`. Better Auth ne l'inclura plus dans l'objet session user → `user.isActive` sera `undefined`, rendant la vérification de désactivation impossible.
 
-### 11. Les tests ne couvrent pas `requireWarehouseAccess` ni `getUserWarehouseIds`
+### 9. [MAJEUR] Pas de protection contre l'auto-modification admin
 
-Seul `requireAuth` est testé. Les deux fonctions async qui font des requêtes DB devraient avoir des tests avec des mocks.
+L'action `update` user n'empêche pas un admin de rétrograder son propre rôle. L'UI masque le bouton (client-side), mais un POST direct contourne cette protection.
 
-### 12. Timestamps stockés en `text`
+### 10. [MAJEUR] Deactivate/Delete bypasse `use:enhance` et CSRF
 
-Stocker les dates en `text` avec `datetime('now')` fonctionne, mais les comparaisons/tris de dates seront plus complexes qu'avec des timestamps UNIX en `integer`. Documenter ce choix.
+```ts
+// Users [id] et Warehouses [id]
+const form = document.createElement('form');
+form.method = 'POST';
+form.action = '?/deactivate';
+document.body.appendChild(form);
+form.submit();
+```
 
-### 13. Login — pas de rate limiting
+Formulaire créé dynamiquement → pas de `use:enhance`, reload complet, fuite DOM (jamais supprimé), erreurs non gérées par le toast system.
 
-Le endpoint Better Auth `/api/auth/[...all]` ne semble pas avoir de protection contre le brute force.
+### 11. [MAJEUR] Modal — pas de focus trap + Escape handler toujours actif
+
+Le `Modal.svelte` :
+- N'a **pas de focus trap** → les utilisateurs peuvent Tab en dehors
+- Le handler `Escape` est actif même quand le modal est fermé → appuyer Escape n'importe où déclenche `onclose()`
+- Pas de scroll lock sur le body
+- Pas de retour du focus à la fermeture
+
+### 12. [MAJEUR] DataTable — éléments cliquables non accessibles au clavier
+
+Les `<tr>` desktop et cards mobile utilisent `onclick` sur des éléments non-interactifs avec `svelte-ignore a11y_*` pour supprimer les warnings au lieu de les corriger. Aucun `tabindex`, `role`, ou `onkeydown`.
+
+### 13. [MAJEUR] DataTable — index comme clé `{#each}`
+
+```svelte
+{#each data as item, i (i)}
+```
+
+L'index comme clé cause des bugs de réutilisation DOM lors de suppressions/réordonnements. Utiliser un `keyField` basé sur l'ID.
+
+---
+
+## Problèmes moyens
+
+### 14. Warehouse assignment sans transaction
+
+Delete-then-insert dans `[id]/+page.server.ts` sans `db.transaction()`. Si l'insert échoue, les assignments existants sont perdus.
+
+### 15. `selectedWarehouses` stale après soumission
+
+Le `SvelteSet` est initialisé une fois au mount et n'est pas re-dérivé après mise à jour des données.
+
+### 16. `loading` state partagé entre formulaires
+
+Un seul `loading = $state(false)` sert aux formulaires update ET warehouse assignment → les deux boutons passent en loading simultanément.
+
+### 17. Formulaire d'édition perd les saisies après erreur validation
+
+Les inputs utilisent `value={data.targetUser.name}` au lieu de `form?.data?.name ?? data.targetUser.name`.
+
+### 18. Redirects serveur non base-path-aware
+
+```ts
+redirect(303, `/warehouses/${id}`); // ← Ignore le base path
+```
+
+Les redirects côté serveur utilisent des chemins absolus tandis que les navigations côté client utilisent `resolve()`.
+
+### 19. Input/Select — `Math.random()` cause des mismatches SSR
+
+Les ID auto-générés via `Math.random()` diffèrent entre serveur et client → mismatch d'hydration → association label/input cassée temporairement.
+
+### 20. Input/Select — erreurs non liées via `aria-describedby`
+
+Les messages d'erreur existent visuellement mais ne sont pas annoncés par les lecteurs d'écran.
+
+### 21. Pas d'audit logging
+
+Le schéma définit une table `auditLogs`, mais aucune opération CRUD (users, warehouses) n'y écrit.
+
+### 22. Page détail warehouse affiche les warehouses soft-deleted
+
+Pas de filtre `isActive = true` dans le load de `warehouses/[id]`.
+
+### 23. Champs optionnels impossible à vider
+
+`address`, `contactName`, `contactPhone` utilisent `|| undefined` → un champ rempli ne peut jamais être remis à vide.
+
+### 24. Enum rôle non validé par Better Auth
+
+Le type `'string'` dans auth.ts accepte n'importe quelle valeur, tandis que le schéma définit un enum restreint. Des rôles invalides peuvent être stockés.
+
+---
+
+## Problèmes mineurs
+
+| # | Problème |
+|---|----------|
+| 25 | Champ `pump` non documenté dans `productWarehouse` |
+| 26 | Password policy trop faible — `min(8)` sans complexité |
+| 27 | Pas de confirmation de mot de passe dans user/new |
+| 28 | Pas de `.trim()` sur les inputs name/email |
+| 29 | Toast : tous les types utilisent `role="alert"` (même info) |
+| 30 | Toast : durée non configurable, pas de `clearAll()`, pas de limite max |
+| 31 | Button : pas de `type="button"` par défaut → `submit` dans les formulaires |
+| 32 | Badge : pas de fallback pour variant invalide → `undefined` dans les classes |
+| 33 | Labels i18n hardcodés en français (`"Fermer"`, `"Confirmer"`, `"Annuler"`) |
+| 34 | Pas de session cookie hardening (`secure`, `httpOnly`, `sameSite`) |
+| 35 | Pas de pagination sur les listes users et warehouses |
+| 36 | Pas de rate limiting sur l'authentification |
+| 37 | Pas de `ORDER BY` sur les requêtes de liste |
 
 ---
 
@@ -119,14 +211,17 @@ Le endpoint Better Auth `/api/auth/[...all]` ne semble pas avoir de protection c
 
 | Catégorie | Verdict |
 |-----------|---------|
-| Architecture DB | Solide, quelques PK manquantes |
-| Auth / RBAC | Bien pensé, vérifier `isActive` |
-| API endpoints | Fonctionnels mais bug de filtrage |
-| UI / Layout | Bonne base responsive |
-| Tests | Couverture minimale, à étoffer |
-| Prêt pour prod | Non — nécessite migration D1 |
+| Sécurité Auth | **Critique** — escalade de privilèges via `input: true` |
+| Architecture DB | Non fonctionnelle sur Workers, FK non enforced |
+| API endpoints | Bug de filtrage, pas de pagination |
+| Pages Users | Fonctionnelles, mais bugs de state et d'accessibilité |
+| Pages Warehouses | Fonctionnelles, fuite de données stock inter-entrepôts |
+| Composants UI | Bonne base, accessibilité à corriger (Modal, DataTable) |
+| Tests | Couverture minimale |
 
-**Verdict global** : Bonnes fondations, mais **3 correctifs bloquants** avant merge :
-1. Migration du driver DB vers D1 pour Cloudflare Workers
-2. Fix du filtrage combiné dans GET `/api/v1/users`
-3. Ajout de PK composites sur `userWarehouses` et `productWarehouse`
+**Verdict global** : Les fonctionnalités sont bien construites, mais **4 correctifs bloquants** avant merge :
+
+1. **`input: false`** sur le champ `role` dans `auth.ts` (escalade de privilèges)
+2. **Migration DB** vers D1 / correction du driver pour Cloudflare Workers
+3. **Fix filtrage** combiné dans GET `/api/v1/users` (`and()`)
+4. **`foreign_keys = ON`** pragma + PK composites sur les tables de jointure
