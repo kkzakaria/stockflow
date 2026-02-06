@@ -10,7 +10,7 @@ import type { RequestHandler } from './$types';
 export const PUT: RequestHandler = async ({ params, request, locals }) => {
 	const user = requireAuth(locals.user);
 	const role = user.role as Role;
-	if (!canManage(role)) error(403, 'Acces non autorise');
+	if (!canManage(role)) error(403, 'Accès non autorisé');
 	await requireWarehouseAccess(user.id, params.warehouseId, role);
 
 	const body = await request.json();
@@ -26,7 +26,7 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 	const warehouse = await db.query.warehouses.findFirst({
 		where: eq(warehouses.id, params.warehouseId)
 	});
-	if (!warehouse) error(404, 'Entrepot introuvable');
+	if (!warehouse) error(404, 'Entrepôt introuvable');
 
 	// Upsert product_warehouse row
 	await db

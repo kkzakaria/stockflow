@@ -54,7 +54,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 export const PUT: RequestHandler = async ({ params, request, locals }) => {
 	const user = requireAuth(locals.user);
-	if (!canManage(user.role as Role)) error(403, 'Acces non autorise');
+	if (!canManage(user.role as Role)) error(403, 'Accès non autorisé');
 
 	const body = await request.json();
 	const parsed = updateProductSchema.safeParse(body);
@@ -78,7 +78,7 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {
 	const user = requireAuth(locals.user);
-	if (!canManage(user.role as Role)) error(403, 'Acces non autorise');
+	if (!canManage(user.role as Role)) error(403, 'Accès non autorisé');
 
 	const existing = await db.query.products.findFirst({
 		where: eq(products.id, params.id)
