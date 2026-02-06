@@ -23,7 +23,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 export const actions: Actions = {
 	default: async ({ params, request, locals }) => {
 		const user = requireAuth(locals.user);
-		if (!canManage(user.role as Role)) return fail(403, { error: 'Acces non autorise' });
+		if (!canManage(user.role as Role))
+			return fail(403, {
+				data: {} as Record<string, unknown>,
+				errors: { name: ['Accès non autorisé'] }
+			});
 
 		const formData = await request.formData();
 		const data = {
@@ -44,7 +48,11 @@ export const actions: Actions = {
 		const existing = await db.query.products.findFirst({
 			where: eq(products.id, params.id)
 		});
-		if (!existing) return fail(404, { error: 'Produit introuvable' });
+		if (!existing)
+			return fail(404, {
+				data: {} as Record<string, unknown>,
+				errors: { name: ['Produit introuvable'] }
+			});
 
 		await db
 			.update(products)

@@ -6,6 +6,11 @@
 
 	let { data, form } = $props();
 	let loading = $state(false);
+
+	const formData = $derived(form?.data as Record<string, unknown> | undefined);
+	const formErrors = $derived(
+		form?.errors as Record<string, string[] | undefined> | undefined
+	);
 </script>
 
 <PageHeader
@@ -13,7 +18,7 @@
 	description="Modifiez les informations du produit"
 >
 	{#snippet actions()}
-		<Button variant="secondary" onclick={() => goto(resolve('/products/' + data.product.id))}
+		<Button variant="secondary" onclick={() => goto(`/products/${data.product.id}`)}
 			>Annuler</Button
 		>
 	{/snippet}
@@ -42,8 +47,8 @@
 				name="name"
 				label="Nom du produit *"
 				placeholder="Ciment Portland 50kg"
-				value={form?.data?.name ?? data.product.name}
-				error={form?.errors?.name?.[0]}
+				value={formData?.name ?? data.product.name}
+				error={formErrors?.name?.[0]}
 				required
 			/>
 
@@ -57,17 +62,17 @@
 					rows="3"
 					placeholder="Description du produit..."
 					class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 focus:outline-none"
-				>{form?.data?.description ?? data.product.description ?? ''}</textarea>
-				{#if form?.errors?.description?.[0]}
-					<p class="text-sm text-red-600">{form.errors.description[0]}</p>
+				>{formData?.description ?? data.product.description ?? ''}</textarea>
+				{#if formErrors?.description?.[0]}
+					<p class="text-sm text-red-600">{formErrors?.description?.[0]}</p>
 				{/if}
 			</div>
 
 			<Select
 				name="categoryId"
 				label="Categorie"
-				value={form?.data?.categoryId ?? data.product.categoryId ?? ''}
-				error={form?.errors?.categoryId?.[0]}
+				value={formData?.categoryId ?? data.product.categoryId ?? ''}
+				error={formErrors?.categoryId?.[0]}
 			>
 				<option value="">-- Aucune categorie --</option>
 				{#each data.categories as category (category.id)}
@@ -79,8 +84,8 @@
 				name="unit"
 				label="Unite"
 				placeholder="unite"
-				value={form?.data?.unit ?? data.product.unit}
-				error={form?.errors?.unit?.[0]}
+				value={formData?.unit ?? data.product.unit}
+				error={formErrors?.unit?.[0]}
 			/>
 
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -91,8 +96,8 @@
 					placeholder="0"
 					min="0"
 					step="1"
-					value={form?.data?.purchasePrice ?? data.product.purchasePrice ?? 0}
-					error={form?.errors?.purchasePrice?.[0]}
+					value={formData?.purchasePrice ?? data.product.purchasePrice ?? 0}
+					error={formErrors?.purchasePrice?.[0]}
 				/>
 
 				<Input
@@ -102,8 +107,8 @@
 					placeholder="0"
 					min="0"
 					step="1"
-					value={form?.data?.salePrice ?? data.product.salePrice ?? 0}
-					error={form?.errors?.salePrice?.[0]}
+					value={formData?.salePrice ?? data.product.salePrice ?? 0}
+					error={formErrors?.salePrice?.[0]}
 				/>
 			</div>
 
@@ -114,15 +119,15 @@
 				placeholder="0"
 				min="0"
 				step="1"
-				value={form?.data?.minStock ?? data.product.minStock ?? 0}
-				error={form?.errors?.minStock?.[0]}
+				value={formData?.minStock ?? data.product.minStock ?? 0}
+				error={formErrors?.minStock?.[0]}
 			/>
 		</div>
 
 		<div class="mt-6 flex justify-end gap-3">
 			<Button
 				variant="secondary"
-				onclick={() => goto(resolve('/products/' + data.product.id))}
+				onclick={() => goto(`/products/${data.product.id}`)}
 			>
 				Annuler
 			</Button>

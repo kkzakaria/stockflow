@@ -18,7 +18,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 export const actions: Actions = {
 	default: async ({ request, locals }) => {
 		const user = requireAuth(locals.user);
-		if (!canManage(user.role as Role)) return fail(403, { error: 'Acces non autorise' });
+		if (!canManage(user.role as Role))
+			return fail(403, {
+				data: {} as Record<string, unknown>,
+				errors: { sku: ['Accès non autorisé'] }
+			});
 
 		const formData = await request.formData();
 		const data = {
