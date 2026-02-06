@@ -1,7 +1,14 @@
 import { error, redirect, fail } from '@sveltejs/kit';
-import { eq, sql, and } from 'drizzle-orm';
+import { eq, sql, and, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { warehouses, productWarehouse, userWarehouses, user } from '$lib/server/db/schema';
+import {
+	warehouses,
+	productWarehouse,
+	userWarehouses,
+	user,
+	transfers,
+	products
+} from '$lib/server/db/schema';
 import { requireAuth, requireWarehouseAccess } from '$lib/server/auth/guards';
 import { requireRole, type Role } from '$lib/server/auth/rbac';
 import { updateWarehouseSchema } from '$lib/validators/warehouse';
@@ -21,7 +28,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		error(404, 'Entrepot non trouve');
 	}
 
-	// Get stock stats
+	// Get stock stats (active products only)
 	const [stats] = await db
 		.select({
 			productCount: sql<number>`COUNT(DISTINCT ${productWarehouse.productId})`,
@@ -29,7 +36,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			totalValue: sql<number>`COALESCE(SUM(${productWarehouse.quantity} * ${productWarehouse.pump}), 0)`
 		})
 		.from(productWarehouse)
-		.where(eq(productWarehouse.warehouseId, params.id));
+		.innerJoin(products, eq(productWarehouse.productId, products.id))
+		.where(and(eq(productWarehouse.warehouseId, params.id), eq(products.isActive, true)));
 
 	// Get assigned users
 	const assignedUsers = await db
@@ -105,6 +113,21 @@ export const actions: Actions = {
 			return fail(409, {
 				deleteError:
 					"Impossible de supprimer un entrepot avec du stock. Transferez d'abord le stock."
+			});
+		}
+
+		// Check if warehouse has active transfers
+		const activeStatuses = ['pending', 'approved', 'shipped'] as const;
+		const activeTransfer = await db.query.transfers.findFirst({
+			where: and(
+				inArray(transfers.status, [...activeStatuses]),
+				sql`(${transfers.sourceWarehouseId} = ${params.id} OR ${transfers.destinationWarehouseId} = ${params.id})`
+			)
+		});
+
+		if (activeTransfer) {
+			return fail(409, {
+				deleteError: 'Impossible de supprimer un entrepot avec des transferts en cours.'
 			});
 		}
 

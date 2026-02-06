@@ -1,5 +1,5 @@
 import { db } from '$lib/server/db';
-import { warehouses, productWarehouse } from '$lib/server/db/schema';
+import { warehouses, productWarehouse, products } from '$lib/server/db/schema';
 import { eq, sql, and, inArray } from 'drizzle-orm';
 import { requireAuth, getUserWarehouseIds } from '$lib/server/auth/guards';
 import type { Role } from '$lib/server/auth/rbac';
@@ -29,22 +29,27 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.orderBy(warehouses.name);
 	}
 
-	// Get stock counts per warehouse (filtered by accessible warehouses)
-	const stockQuery = db
+	// Get stock counts per warehouse (filtered by accessible warehouses, active products only)
+	const baseStockQuery = db
 		.select({
 			warehouseId: productWarehouse.warehouseId,
 			productCount: sql<number>`COUNT(DISTINCT ${productWarehouse.productId})`,
 			totalQuantity: sql<number>`COALESCE(SUM(${productWarehouse.quantity}), 0)`,
 			totalValue: sql<number>`COALESCE(SUM(${productWarehouse.quantity} * ${productWarehouse.pump}), 0)`
 		})
-		.from(productWarehouse);
+		.from(productWarehouse)
+		.innerJoin(products, eq(productWarehouse.productId, products.id));
 
 	const stockCounts =
 		warehouseIds !== null
-			? await stockQuery
-					.where(inArray(productWarehouse.warehouseId, warehouseIds))
+			? await baseStockQuery
+					.where(
+						and(inArray(productWarehouse.warehouseId, warehouseIds), eq(products.isActive, true))
+					)
 					.groupBy(productWarehouse.warehouseId)
-			: await stockQuery.groupBy(productWarehouse.warehouseId);
+			: await baseStockQuery
+					.where(eq(products.isActive, true))
+					.groupBy(productWarehouse.warehouseId);
 
 	const stockMap = new Map(stockCounts.map((s) => [s.warehouseId, s]));
 

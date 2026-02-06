@@ -1,4 +1,4 @@
-import { redirect, fail } from '@sveltejs/kit';
+import { redirect, fail, isRedirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { user, warehouses } from '$lib/server/db/schema';
@@ -57,6 +57,8 @@ export const actions: Actions = {
 			});
 		}
 
+		let createdUserId: string | undefined;
+
 		try {
 			const result = await auth.api.signUpEmail({
 				body: {
@@ -73,17 +75,22 @@ export const actions: Actions = {
 				});
 			}
 
-			// Set the role
+			createdUserId = result.user.id;
+
+			// Set the role immediately after creation
 			if (parsed.data.role !== 'viewer') {
-				await db.update(user).set({ role: parsed.data.role }).where(eq(user.id, result.user.id));
+				await db.update(user).set({ role: parsed.data.role }).where(eq(user.id, createdUserId));
 			}
 
-			redirect(303, `/users/${result.user.id}`);
+			redirect(303, `/users/${createdUserId}`);
 		} catch (e) {
-			// Re-throw redirect
-			if (e && typeof e === 'object' && 'status' in e && (e as { status: number }).status === 303) {
-				throw e;
+			if (isRedirect(e)) throw e;
+
+			// Cleanup: deactivate partially-created user if role update failed
+			if (createdUserId) {
+				await db.update(user).set({ isActive: false }).where(eq(user.id, createdUserId));
 			}
+
 			return fail(500, {
 				data: { name: data.name, email: data.email, role: data.role },
 				errors: { email: ['Erreur lors de la creation du compte'] } as Record<string, string[]>

@@ -4,7 +4,7 @@ import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/schema';
 import { requireAuth } from '$lib/server/auth/guards';
 import { requireRole, type Role } from '$lib/server/auth/rbac';
-import { createUserSchema } from '$lib/validators/user';
+import { createUserSchema, ROLES } from '$lib/validators/user';
 import { auth } from '$lib/server/auth';
 import type { RequestHandler } from './$types';
 
@@ -21,6 +21,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	const conditions: SQL[] = [];
 
 	if (roleFilter) {
+		if (!ROLES.includes(roleFilter as (typeof ROLES)[number])) {
+			error(400, { message: `Invalid role filter: ${roleFilter}` });
+		}
 		conditions.push(eq(user.role, roleFilter as Role));
 	}
 
