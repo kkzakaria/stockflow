@@ -22,7 +22,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	if (roleFilter) {
 		if (!ROLES.includes(roleFilter as (typeof ROLES)[number])) {
-			error(400, { message: `Invalid role filter: ${roleFilter}` });
+			error(400, { message: 'Invalid role filter' });
 		}
 		conditions.push(eq(user.role, roleFilter as Role));
 	}
