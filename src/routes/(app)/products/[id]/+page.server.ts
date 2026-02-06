@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, type SQL } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { products, productWarehouse, warehouses, movements } from '$lib/server/db/schema';
 import { requireAuth, getUserWarehouseIds } from '$lib/server/auth/guards';
@@ -38,9 +38,17 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			? warehouseStock
 			: warehouseStock.filter((s) => warehouseIds.includes(s.warehouseId));
 
-	// Recent movements
+	// Recent movements (scoped by warehouse access)
+	const movementConditions: SQL[] = [eq(movements.productId, params.id)];
+	if (warehouseIds !== null && warehouseIds.length > 0) {
+		movementConditions.push(inArray(movements.warehouseId, warehouseIds));
+	} else if (warehouseIds !== null) {
+		// Scoped user with no warehouses — no movements to show
+		movementConditions.push(sql`0 = 1`);
+	}
+
 	const recentMovements = await db.query.movements.findMany({
-		where: eq(movements.productId, params.id),
+		where: and(...movementConditions),
 		with: {
 			warehouse: { columns: { name: true } },
 			user: { columns: { name: true } }

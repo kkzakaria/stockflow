@@ -41,12 +41,22 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		db.select().from(categories)
 	]);
 
-	// Get stock totals
+	// Get stock totals in a single query
 	const warehouseIds = await getUserWarehouseIds(user.id, role);
-	const productsWithStock = await Promise.all(
-		productList.map(async (p) => {
-			const stockConditions: SQL[] = [eq(productWarehouse.productId, p.id)];
-			if (warehouseIds) {
+	const productIds = productList.map((p) => p.id);
+
+	let stockMap = new Map<string, { totalStock: number; stockValue: number }>();
+	if (productIds.length > 0) {
+		if (warehouseIds !== null && warehouseIds.length === 0) {
+			// User has warehouse-scoped role but no warehouses assigned
+		} else {
+			const stockConditions: SQL[] = [
+				sql`${productWarehouse.productId} IN (${sql.join(
+					productIds.map((id) => sql`${id}`),
+					sql`, `
+				)})`
+			];
+			if (warehouseIds !== null && warehouseIds.length > 0) {
 				stockConditions.push(
 					sql`${productWarehouse.warehouseId} IN (${sql.join(
 						warehouseIds.map((id) => sql`${id}`),
@@ -55,17 +65,30 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				);
 			}
 
-			const [stockResult] = await db
+			const stockResults = await db
 				.select({
+					productId: productWarehouse.productId,
 					totalStock: sql<number>`COALESCE(SUM(${productWarehouse.quantity}), 0)`,
 					stockValue: sql<number>`COALESCE(SUM(${productWarehouse.quantity} * ${productWarehouse.pump}), 0)`
 				})
 				.from(productWarehouse)
-				.where(and(...stockConditions));
+				.where(and(...stockConditions))
+				.groupBy(productWarehouse.productId);
 
-			return { ...p, totalStock: stockResult.totalStock, stockValue: stockResult.stockValue };
-		})
-	);
+			for (const row of stockResults) {
+				stockMap.set(row.productId, {
+					totalStock: row.totalStock,
+					stockValue: row.stockValue
+				});
+			}
+		}
+	}
+
+	const productsWithStock = productList.map((p) => ({
+		...p,
+		totalStock: stockMap.get(p.id)?.totalStock ?? 0,
+		stockValue: stockMap.get(p.id)?.stockValue ?? 0
+	}));
 
 	return {
 		products: productsWithStock,

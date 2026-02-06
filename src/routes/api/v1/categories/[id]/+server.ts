@@ -23,7 +23,12 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 	const user = requireAuth(locals.user);
 	if (!canManage(user.role as Role)) error(403, 'Accès non autorisé');
 
-	const body = await request.json();
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		error(400, { message: 'Corps JSON invalide' });
+	}
 	const parsed = updateCategorySchema.safeParse(body);
 	if (!parsed.success) {
 		error(400, { message: parsed.error.issues.map((i) => i.message).join(', ') });

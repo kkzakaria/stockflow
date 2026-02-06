@@ -21,7 +21,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		error(403, 'Accès non autorisé');
 	}
 
-	const body = await request.json();
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		error(400, { message: 'Corps JSON invalide' });
+	}
 	const parsed = createCategorySchema.safeParse(body);
 
 	if (!parsed.success) {

@@ -1,5 +1,5 @@
 import { redirect, fail } from '@sveltejs/kit';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { products, warehouses } from '$lib/server/db/schema';
 import { requireAuth, getUserWarehouseIds, requireWarehouseAccess } from '$lib/server/auth/guards';
@@ -26,10 +26,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		if (warehouseIds.length === 0) {
 			warehouseList = [];
 		} else {
-			warehouseList = await db.query.warehouses.findMany({
-				where: and(eq(warehouses.isActive, true))
-			});
-			warehouseList = warehouseList.filter((w) => warehouseIds.includes(w.id));
+			warehouseList = await db
+				.select()
+				.from(warehouses)
+				.where(and(eq(warehouses.isActive, true), inArray(warehouses.id, warehouseIds)));
 		}
 	}
 
@@ -62,7 +62,7 @@ export const actions: Actions = {
 		if (!canWrite(role))
 			return fail(403, {
 				data: {} as Record<string, string>,
-				errors: { productId: ['Acces non autorise'] }
+				errors: { productId: ['Accès non autorisé'] }
 			});
 
 		const formData = await request.formData();

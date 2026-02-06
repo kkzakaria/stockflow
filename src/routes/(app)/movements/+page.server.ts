@@ -77,6 +77,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			.select({ count: sql<number>`COUNT(*)` })
 			.from(movements)
 			.innerJoin(products, eq(movements.productId, products.id))
+			.innerJoin(warehouses, eq(movements.warehouseId, warehouses.id))
 			.where(whereClause),
 		db
 			.select()

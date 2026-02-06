@@ -5,7 +5,10 @@ export const createCategorySchema = z.object({
 	parentId: z.string().nullable().optional()
 });
 
-export const updateCategorySchema = createCategorySchema.partial();
+export const updateCategorySchema = createCategorySchema.partial().refine(
+	(data) => Object.values(data).some((v) => v !== undefined),
+	{ message: 'Au moins un champ est requis' }
+);
 
 export type CreateCategory = z.infer<typeof createCategorySchema>;
 export type UpdateCategory = z.infer<typeof updateCategorySchema>;

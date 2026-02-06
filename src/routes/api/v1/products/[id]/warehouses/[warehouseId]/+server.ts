@@ -13,7 +13,12 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 	if (!canManage(role)) error(403, 'Accès non autorisé');
 	await requireWarehouseAccess(user.id, params.warehouseId, role);
 
-	const body = await request.json();
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		error(400, { message: 'Corps JSON invalide' });
+	}
 	const parsed = updateProductWarehouseSchema.safeParse(body);
 	if (!parsed.success) {
 		error(400, { message: parsed.error.issues.map((i) => i.message).join(', ') });

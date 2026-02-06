@@ -66,6 +66,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		db
 			.select({ count: sql<number>`COUNT(*)` })
 			.from(movements)
+			.innerJoin(products, eq(movements.productId, products.id))
+			.innerJoin(warehouses, eq(movements.warehouseId, warehouses.id))
 			.where(whereClause)
 	]);
 
@@ -77,7 +79,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const role = user.role as Role;
 	if (!canWrite(role)) error(403, 'Accès non autorisé');
 
-	const body = await request.json();
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		error(400, { message: 'Corps JSON invalide' });
+	}
 	const parsed = createMovementSchema.safeParse(body);
 	if (!parsed.success) {
 		error(400, { message: parsed.error.issues.map((i) => i.message).join(', ') });

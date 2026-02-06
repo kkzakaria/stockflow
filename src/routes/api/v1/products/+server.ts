@@ -45,11 +45,21 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 			.where(whereClause)
 	]);
 
-	// Fetch stock totals for each product, scoped to user's accessible warehouses
+	// Fetch stock totals in a single aggregation query
 	const warehouseIds = await getUserWarehouseIds(user.id, role);
-	const productsWithStock = await Promise.all(
-		productList.map(async (p) => {
-			const stockConditions: SQL[] = [eq(productWarehouse.productId, p.id)];
+	const productIds = productList.map((p) => p.id);
+
+	let stockMap = new Map<string, { totalStock: number; stockValue: number }>();
+	if (productIds.length > 0) {
+		if (warehouseIds !== null && warehouseIds.length === 0) {
+			// User has warehouse-scoped role but no warehouses assigned
+		} else {
+			const stockConditions: SQL[] = [
+				sql`${productWarehouse.productId} IN (${sql.join(
+					productIds.map((id) => sql`${id}`),
+					sql`, `
+				)})`
+			];
 			if (warehouseIds !== null && warehouseIds.length > 0) {
 				stockConditions.push(
 					sql`${productWarehouse.warehouseId} IN (${sql.join(
@@ -57,22 +67,32 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 						sql`, `
 					)})`
 				);
-			} else if (warehouseIds !== null) {
-				// User has warehouse-scoped role but no warehouses assigned
-				return { ...p, totalStock: 0, stockValue: 0 };
 			}
 
-			const [stockResult] = await db
+			const stockResults = await db
 				.select({
+					productId: productWarehouse.productId,
 					totalStock: sql<number>`COALESCE(SUM(${productWarehouse.quantity}), 0)`,
 					stockValue: sql<number>`COALESCE(SUM(${productWarehouse.quantity} * ${productWarehouse.pump}), 0)`
 				})
 				.from(productWarehouse)
-				.where(and(...stockConditions));
+				.where(and(...stockConditions))
+				.groupBy(productWarehouse.productId);
 
-			return { ...p, totalStock: stockResult.totalStock, stockValue: stockResult.stockValue };
-		})
-	);
+			for (const row of stockResults) {
+				stockMap.set(row.productId, {
+					totalStock: row.totalStock,
+					stockValue: row.stockValue
+				});
+			}
+		}
+	}
+
+	const productsWithStock = productList.map((p) => ({
+		...p,
+		totalStock: stockMap.get(p.id)?.totalStock ?? 0,
+		stockValue: stockMap.get(p.id)?.stockValue ?? 0
+	}));
 
 	return json({ data: productsWithStock, pagination: { page, limit, total } });
 };
@@ -83,7 +103,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		error(403, 'Accès non autorisé');
 	}
 
-	const body = await request.json();
+	let body;
+	try {
+		body = await request.json();
+	} catch {
+		error(400, { message: 'Corps JSON invalide' });
+	}
 	const parsed = createProductSchema.safeParse(body);
 	if (!parsed.success) {
 		error(400, { message: parsed.error.issues.map((i) => i.message).join(', ') });
