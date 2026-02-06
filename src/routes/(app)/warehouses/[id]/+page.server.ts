@@ -1,20 +1,20 @@
 import { error, redirect, fail } from '@sveltejs/kit';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { warehouses, productWarehouse, userWarehouses, user } from '$lib/server/db/schema';
-import { requireWarehouseAccess } from '$lib/server/auth/guards';
+import { requireAuth, requireWarehouseAccess } from '$lib/server/auth/guards';
 import { requireRole, type Role } from '$lib/server/auth/rbac';
 import { updateWarehouseSchema } from '$lib/validators/warehouse';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	const currentUser = locals.user!;
+	const currentUser = requireAuth(locals.user);
 	const role = currentUser.role as Role;
 
 	await requireWarehouseAccess(currentUser.id, params.id, role);
 
 	const warehouse = await db.query.warehouses.findFirst({
-		where: eq(warehouses.id, params.id)
+		where: and(eq(warehouses.id, params.id), eq(warehouses.isActive, true))
 	});
 
 	if (!warehouse) {
@@ -53,15 +53,21 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 export const actions: Actions = {
 	update: async ({ params, request, locals }) => {
-		requireRole(locals.user!.role as Role, 'admin');
+		const currentUser = requireAuth(locals.user);
+		requireRole(currentUser.role as Role, 'admin');
 
 		const formData = await request.formData();
+		const name = (formData.get('name') as string)?.trim();
+		const address = (formData.get('address') as string)?.trim() || null;
+		const contactName = (formData.get('contactName') as string)?.trim() || null;
+		const contactPhone = (formData.get('contactPhone') as string)?.trim() || null;
+		const contactEmail = (formData.get('contactEmail') as string)?.trim() || null;
 		const data = {
-			name: formData.get('name') as string,
-			address: (formData.get('address') as string) || undefined,
-			contactName: (formData.get('contactName') as string) || undefined,
-			contactPhone: (formData.get('contactPhone') as string) || undefined,
-			contactEmail: (formData.get('contactEmail') as string) || undefined
+			name: name || undefined,
+			address: address ?? undefined,
+			contactName: contactName ?? undefined,
+			contactPhone: contactPhone ?? undefined,
+			contactEmail: contactEmail ?? undefined
 		};
 
 		const parsed = updateWarehouseSchema.safeParse(data);
@@ -86,7 +92,8 @@ export const actions: Actions = {
 	},
 
 	delete: async ({ params, locals }) => {
-		requireRole(locals.user!.role as Role, 'admin');
+		const currentUser = requireAuth(locals.user);
+		requireRole(currentUser.role as Role, 'admin');
 
 		// Check if warehouse has stock
 		const [stock] = await db

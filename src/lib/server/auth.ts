@@ -6,11 +6,15 @@ import * as schema from './db/schema';
 export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: 'sqlite', schema }),
 	emailAndPassword: {
-		enabled: true
+		enabled: true,
+		minPasswordLength: 8
 	},
 	session: {
 		expiresIn: 60 * 60 * 24 * 7, // 7 days
 		updateAge: 60 * 60 * 24 // refresh daily
+	},
+	advanced: {
+		cookiePrefix: 'stockflow'
 	},
 	user: {
 		additionalFields: {
@@ -18,7 +22,13 @@ export const auth = betterAuth({
 				type: 'string',
 				required: false,
 				defaultValue: 'viewer',
-				input: true
+				input: false
+			},
+			isActive: {
+				type: 'boolean',
+				required: false,
+				defaultValue: true,
+				input: false
 			}
 		}
 	}

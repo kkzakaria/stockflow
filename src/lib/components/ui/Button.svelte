@@ -14,6 +14,7 @@
 		size = 'md',
 		loading = false,
 		disabled = false,
+		type = 'button',
 		class: className = '',
 		children,
 		...rest
@@ -37,6 +38,7 @@
 </script>
 
 <button
+	{type}
 	class="{baseClasses} {variantClasses[variant]} {sizeClasses[size]} {className}"
 	disabled={disabled || loading}
 	{...rest}

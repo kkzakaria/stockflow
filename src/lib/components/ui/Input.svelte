@@ -1,3 +1,7 @@
+<script lang="ts" module>
+	let inputCounter = 0;
+</script>
+
 <script lang="ts">
 	import type { HTMLInputAttributes } from 'svelte/elements';
 
@@ -9,8 +13,9 @@
 
 	let { label, error, hint, id, class: className = '', ...rest }: Props = $props();
 
-	const fallbackId = `input-${Math.random().toString(36).slice(2, 9)}`;
+	const fallbackId = `input-${inputCounter++}`;
 	const inputId = $derived(id ?? fallbackId);
+	const errorId = $derived(`${inputId}-error`);
 </script>
 
 <div class="space-y-1">
@@ -27,11 +32,13 @@
 			? 'border-red-300 focus:border-red-500 focus:ring-red-500'
 			: 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}
 			{className}"
+		aria-invalid={error ? true : undefined}
+		aria-describedby={error ? errorId : undefined}
 		{...rest}
 	/>
 
 	{#if error}
-		<p class="text-sm text-red-600">{error}</p>
+		<p id={errorId} class="text-sm text-red-600">{error}</p>
 	{:else if hint}
 		<p class="text-sm text-gray-500">{hint}</p>
 	{/if}

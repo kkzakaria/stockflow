@@ -1,3 +1,7 @@
+<script lang="ts" module>
+	let selectCounter = 0;
+</script>
+
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { HTMLSelectAttributes } from 'svelte/elements';
@@ -10,8 +14,9 @@
 
 	let { label, error, id, class: className = '', children, ...rest }: Props = $props();
 
-	const fallbackId = `select-${Math.random().toString(36).slice(2, 9)}`;
+	const fallbackId = `select-${selectCounter++}`;
 	const selectId = $derived(id ?? fallbackId);
+	const errorId = $derived(`${selectId}-error`);
 </script>
 
 <div class="space-y-1">
@@ -28,12 +33,14 @@
 			? 'border-red-300 focus:border-red-500 focus:ring-red-500'
 			: 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}
 			{className}"
+		aria-invalid={error ? true : undefined}
+		aria-describedby={error ? errorId : undefined}
 		{...rest}
 	>
 		{@render children()}
 	</select>
 
 	{#if error}
-		<p class="text-sm text-red-600">{error}</p>
+		<p id={errorId} class="text-sm text-red-600">{error}</p>
 	{/if}
 </div>

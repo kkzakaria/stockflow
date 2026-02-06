@@ -12,7 +12,11 @@ export const ROLES = [
 export const createUserSchema = z.object({
 	name: z.string().min(1, 'Le nom est requis').max(255),
 	email: z.string().email('Email invalide'),
-	password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères'),
+	password: z
+		.string()
+		.min(8, 'Le mot de passe doit contenir au moins 8 caractères')
+		.regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
+		.regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre'),
 	role: z.enum(ROLES).default('viewer')
 });
 

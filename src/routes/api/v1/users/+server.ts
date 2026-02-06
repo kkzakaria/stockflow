@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
+import { eq, and, desc, sql, type SQL } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/schema';
 import { requireAuth } from '$lib/server/auth/guards';
@@ -14,18 +14,35 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	const roleFilter = url.searchParams.get('role');
 	const activeFilter = url.searchParams.get('active');
+	const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+	const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 20));
+	const offset = (page - 1) * limit;
 
-	let query = db.select().from(user).$dynamic();
+	const conditions: SQL[] = [];
 
 	if (roleFilter) {
-		query = query.where(eq(user.role, roleFilter as Role));
+		conditions.push(eq(user.role, roleFilter as Role));
 	}
 
 	if (activeFilter !== null && activeFilter !== undefined) {
-		query = query.where(eq(user.isActive, activeFilter === 'true'));
+		conditions.push(eq(user.isActive, activeFilter === 'true'));
 	}
 
-	const users = await query;
+	const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+	const [users, [{ count: total }]] = await Promise.all([
+		db
+			.select()
+			.from(user)
+			.where(whereClause)
+			.orderBy(desc(user.createdAt))
+			.limit(limit)
+			.offset(offset),
+		db
+			.select({ count: sql<number>`COUNT(*)` })
+			.from(user)
+			.where(whereClause)
+	]);
 
 	// Strip sensitive fields
 	const sanitized = users.map(({ ...u }) => ({
@@ -38,14 +55,16 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		updatedAt: u.updatedAt
 	}));
 
-	return json({ data: sanitized });
+	return json({ data: sanitized, pagination: { page, limit, total } });
 };
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const currentUser = requireAuth(locals.user);
 	requireRole(currentUser.role as Role, 'admin');
 
-	const body = await request.json();
+	const body = (await request.json()) as Record<string, unknown>;
+	if (typeof body.name === 'string') body.name = body.name.trim();
+	if (typeof body.email === 'string') body.email = body.email.trim();
 	const parsed = createUserSchema.safeParse(body);
 
 	if (!parsed.success) {

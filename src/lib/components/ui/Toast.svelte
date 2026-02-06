@@ -1,6 +1,12 @@
 <script lang="ts">
 	import { toast } from '$lib/stores/toast';
 
+	interface Props {
+		closeLabel?: string;
+	}
+
+	let { closeLabel = 'Close' }: Props = $props();
+
 	const iconByType = {
 		success: '\u2713',
 		error: '\u2715',
@@ -20,7 +26,7 @@
 	{#each $toast as t (t.id)}
 		<div
 			class="flex items-center gap-2 rounded-lg border px-4 py-3 shadow-lg {colorByType[t.type]}"
-			role="alert"
+			role={t.type === 'error' || t.type === 'warning' ? 'alert' : 'status'}
 		>
 			<span class="text-lg">{iconByType[t.type]}</span>
 			<p class="text-sm font-medium">{t.message}</p>
@@ -28,7 +34,7 @@
 				type="button"
 				onclick={() => toast.remove(t.id)}
 				class="ml-2 opacity-50 hover:opacity-100"
-				aria-label="Fermer"
+				aria-label={closeLabel}
 			>
 				&times;
 			</button>

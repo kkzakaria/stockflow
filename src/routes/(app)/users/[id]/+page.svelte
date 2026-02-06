@@ -10,8 +10,10 @@
 
 	let editing = $state(false);
 	let editingWarehouses = $state(false);
-	let loading = $state(false);
+	let updateLoading = $state(false);
+	let warehouseLoading = $state(false);
 	let showDeactivateModal = $state(false);
+	let deactivateFormEl: HTMLFormElement | undefined = $state();
 
 	const roleLabels: Record<string, string> = {
 		admin: 'Administrateur',
@@ -45,8 +47,8 @@
 		}
 	});
 
-	let selectedWarehouses = new SvelteSet(
-		data.targetUser.warehouses.map((w: { id: string }) => w.id)
+	let selectedWarehouses = $derived(
+		new SvelteSet(data.targetUser.warehouses.map((w: { id: string }) => w.id))
 	);
 
 	function toggleWarehouse(id: string) {
@@ -83,10 +85,10 @@
 				method="POST"
 				action="?/update"
 				use:enhance={() => {
-					loading = true;
+					updateLoading = true;
 					return async ({ update }) => {
 						await update();
-						loading = false;
+						updateLoading = false;
 					};
 				}}
 			>
@@ -94,7 +96,9 @@
 					<Input
 						name="name"
 						label="Nom"
-						value={data.targetUser.name}
+						value={form?.action === 'update'
+							? (form?.data?.name ?? data.targetUser.name)
+							: data.targetUser.name}
 						error={form?.action === 'update' ? form?.errors?.name?.[0] : undefined}
 						required
 					/>
@@ -102,7 +106,9 @@
 					<Select
 						name="role"
 						label="Role"
-						value={data.targetUser.role ?? 'viewer'}
+						value={form?.action === 'update'
+							? (form?.data?.role ?? data.targetUser.role ?? 'viewer')
+							: (data.targetUser.role ?? 'viewer')}
 						error={form?.action === 'update' ? form?.errors?.role?.[0] : undefined}
 					>
 						{#each data.roles as role (role)}
@@ -124,7 +130,7 @@
 				</div>
 
 				<div class="mt-6 flex justify-end">
-					<Button type="submit" {loading}>Enregistrer</Button>
+					<Button type="submit" loading={updateLoading}>Enregistrer</Button>
 				</div>
 			</form>
 		{:else}
@@ -178,10 +184,10 @@
 				method="POST"
 				action="?/assignWarehouses"
 				use:enhance={() => {
-					loading = true;
+					warehouseLoading = true;
 					return async ({ update }) => {
 						await update();
-						loading = false;
+						warehouseLoading = false;
 					};
 				}}
 			>
@@ -201,7 +207,7 @@
 					{/each}
 				</div>
 				<div class="mt-4 flex justify-end">
-					<Button type="submit" size="sm" {loading}>Enregistrer</Button>
+					<Button type="submit" size="sm" loading={warehouseLoading}>Enregistrer</Button>
 				</div>
 			</form>
 		{:else if data.targetUser.warehouses.length === 0}
@@ -219,6 +225,15 @@
 	</Card>
 </div>
 
+<!-- Hidden deactivate form with use:enhance -->
+<form
+	method="POST"
+	action="?/deactivate"
+	use:enhance
+	bind:this={deactivateFormEl}
+	class="hidden"
+></form>
+
 <!-- Deactivate Confirmation Modal -->
 <ConfirmModal
 	bind:open={showDeactivateModal}
@@ -228,10 +243,6 @@
 	variant="danger"
 	oncancel={() => (showDeactivateModal = false)}
 	onconfirm={() => {
-		const deactivateForm = document.createElement('form');
-		deactivateForm.method = 'POST';
-		deactivateForm.action = '?/deactivate';
-		document.body.appendChild(deactivateForm);
-		deactivateForm.submit();
+		deactivateFormEl?.requestSubmit();
 	}}
 />

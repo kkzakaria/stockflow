@@ -6,6 +6,7 @@ import { env } from '$env/dynamic/private';
 if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
 const sqlite = new Database(env.DATABASE_URL);
+sqlite.pragma('foreign_keys = ON');
 
 // Patch better-sqlite3 Statement to coerce unsupported JS types.
 // better-sqlite3 can only bind numbers, strings, bigints, buffers, and null.

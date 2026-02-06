@@ -8,30 +8,44 @@ export interface Toast {
 	message: string;
 }
 
+const MAX_TOASTS = 5;
+
 function createToastStore() {
-	const { subscribe, update } = writable<Toast[]>([]);
+	const { subscribe, update, set } = writable<Toast[]>([]);
 
-	function add(type: ToastType, message: string) {
+	function add(type: ToastType, message: string, duration = 5000) {
 		const id = Math.random().toString(36).slice(2, 9);
-		update((toasts) => [...toasts, { id, type, message }]);
+		update((toasts) => {
+			const next = [...toasts, { id, type, message }];
+			// Keep only the most recent toasts
+			if (next.length > MAX_TOASTS) {
+				return next.slice(next.length - MAX_TOASTS);
+			}
+			return next;
+		});
 
-		// Auto-remove after 5 seconds
+		// Auto-remove after duration
 		setTimeout(() => {
 			remove(id);
-		}, 5000);
+		}, duration);
 	}
 
 	function remove(id: string) {
 		update((toasts) => toasts.filter((t) => t.id !== id));
 	}
 
+	function clearAll() {
+		set([]);
+	}
+
 	return {
 		subscribe,
-		success: (message: string) => add('success', message),
-		error: (message: string) => add('error', message),
-		warning: (message: string) => add('warning', message),
-		info: (message: string) => add('info', message),
-		remove
+		success: (message: string, duration?: number) => add('success', message, duration),
+		error: (message: string, duration?: number) => add('error', message, duration),
+		warning: (message: string, duration?: number) => add('warning', message, duration),
+		info: (message: string, duration?: number) => add('info', message, duration),
+		remove,
+		clearAll
 	};
 }
 

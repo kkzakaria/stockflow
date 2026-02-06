@@ -6,6 +6,8 @@
 
 	let { data, form } = $props();
 	let loading = $state(false);
+	let confirmPassword = $state('');
+	let confirmPasswordError = $state('');
 
 	const roleLabels: Record<string, string> = {
 		admin: 'Administrateur',
@@ -26,7 +28,14 @@
 <Card class="max-w-2xl">
 	<form
 		method="POST"
-		use:enhance={() => {
+		use:enhance={({ formData, cancel }) => {
+			confirmPasswordError = '';
+			const password = formData.get('password') as string;
+			if (password !== confirmPassword) {
+				confirmPasswordError = 'Les mots de passe ne correspondent pas';
+				cancel();
+				return;
+			}
 			loading = true;
 			return async ({ update }) => {
 				await update();
@@ -60,7 +69,19 @@
 				label="Mot de passe *"
 				placeholder="••••••••"
 				error={form?.errors?.password?.[0]}
-				hint="Minimum 8 caracteres"
+				hint="Minimum 8 caracteres, 1 majuscule, 1 chiffre"
+				required
+			/>
+
+			<Input
+				type="password"
+				label="Confirmer le mot de passe *"
+				placeholder="••••••••"
+				value={confirmPassword}
+				oninput={(e) => {
+					confirmPassword = (e.target as HTMLInputElement).value;
+				}}
+				error={confirmPasswordError || undefined}
 				required
 			/>
 

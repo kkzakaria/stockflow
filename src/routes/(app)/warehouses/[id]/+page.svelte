@@ -10,6 +10,7 @@
 	let editing = $state(false);
 	let loading = $state(false);
 	let showDeleteModal = $state(false);
+	let deleteFormEl: HTMLFormElement | undefined = $state();
 
 	function formatXOF(amount: number): string {
 		return new Intl.NumberFormat('fr-FR', {
@@ -179,6 +180,9 @@
 	{/if}
 </Card>
 
+<!-- Hidden delete form with use:enhance -->
+<form method="POST" action="?/delete" use:enhance bind:this={deleteFormEl} class="hidden"></form>
+
 <!-- Delete Confirmation Modal -->
 <ConfirmModal
 	bind:open={showDeleteModal}
@@ -188,10 +192,6 @@
 	variant="danger"
 	oncancel={() => (showDeleteModal = false)}
 	onconfirm={() => {
-		const deleteForm = document.createElement('form');
-		deleteForm.method = 'POST';
-		deleteForm.action = '?/delete';
-		document.body.appendChild(deleteForm);
-		deleteForm.submit();
+		deleteFormEl?.requestSubmit();
 	}}
 />

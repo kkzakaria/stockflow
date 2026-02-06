@@ -1,4 +1,12 @@
-import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+	sqliteTable,
+	text,
+	integer,
+	real,
+	index,
+	uniqueIndex,
+	primaryKey
+} from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
@@ -107,6 +115,7 @@ export const userWarehouses = sqliteTable(
 			.references(() => warehouses.id, { onDelete: 'cascade' })
 	},
 	(table) => [
+		primaryKey({ columns: [table.userId, table.warehouseId] }),
 		index('idx_uw_user').on(table.userId),
 		index('idx_uw_warehouse').on(table.warehouseId)
 	]
@@ -153,10 +162,12 @@ export const productWarehouse = sqliteTable(
 			.references(() => warehouses.id),
 		quantity: integer('quantity').default(0),
 		minStock: integer('min_stock'),
+		/** PUMP: Prix Unitaire Moyen Pondere (weighted average cost) */
 		pump: real('pump').default(0),
 		updatedAt: updatedAt()
 	},
 	(table) => [
+		primaryKey({ columns: [table.productId, table.warehouseId] }),
 		index('idx_pw_product').on(table.productId),
 		index('idx_pw_warehouse').on(table.warehouseId)
 	]

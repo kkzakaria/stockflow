@@ -2,13 +2,15 @@ import { redirect, fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { user, warehouses } from '$lib/server/db/schema';
+import { requireAuth } from '$lib/server/auth/guards';
 import { requireRole, type Role } from '$lib/server/auth/rbac';
 import { createUserSchema, ROLES } from '$lib/validators/user';
 import { auth } from '$lib/server/auth';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	requireRole(locals.user!.role as Role, 'admin');
+	const currentUser = requireAuth(locals.user);
+	requireRole(currentUser.role as Role, 'admin');
 
 	const warehouseList = await db
 		.select({ id: warehouses.id, name: warehouses.name })
@@ -23,12 +25,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 export const actions: Actions = {
 	default: async ({ request, locals }) => {
-		requireRole(locals.user!.role as Role, 'admin');
+		const currentUser = requireAuth(locals.user);
+		requireRole(currentUser.role as Role, 'admin');
 
 		const formData = await request.formData();
 		const data = {
-			name: formData.get('name') as string,
-			email: formData.get('email') as string,
+			name: (formData.get('name') as string)?.trim(),
+			email: (formData.get('email') as string)?.trim(),
 			password: formData.get('password') as string,
 			role: formData.get('role') as string
 		};

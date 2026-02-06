@@ -4,11 +4,15 @@
 	interface Props {
 		open: boolean;
 		title?: string;
+		closeLabel?: string;
 		onclose?: () => void;
 		children: Snippet;
 	}
 
-	let { open = $bindable(), title, onclose, children }: Props = $props();
+	let { open = $bindable(), title, closeLabel = 'Close', onclose, children }: Props = $props();
+
+	let previousActiveElement: HTMLElement | null = null;
+	let dialogEl: HTMLDivElement | undefined = $state();
 
 	function handleClose() {
 		open = false;
@@ -22,10 +26,48 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		if (!open) return;
 		if (e.key === 'Escape') {
 			handleClose();
 		}
+		if (e.key === 'Tab' && dialogEl) {
+			const focusable = dialogEl.querySelectorAll<HTMLElement>(
+				'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+			);
+			if (focusable.length === 0) return;
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+			if (e.shiftKey) {
+				if (document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				}
+			} else {
+				if (document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
+			}
+		}
 	}
+
+	$effect(() => {
+		if (open) {
+			previousActiveElement = document.activeElement as HTMLElement | null;
+			document.body.style.overflow = 'hidden';
+			// Focus the dialog on next tick
+			requestAnimationFrame(() => {
+				dialogEl?.focus();
+			});
+		} else {
+			document.body.style.overflow = '';
+			previousActiveElement?.focus();
+			previousActiveElement = null;
+		}
+		return () => {
+			document.body.style.overflow = '';
+		};
+	});
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -37,10 +79,12 @@
 		onclick={handleBackdropClick}
 	>
 		<div
+			bind:this={dialogEl}
 			class="w-full max-w-md rounded-lg bg-white shadow-xl"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby={title ? 'modal-title' : undefined}
+			tabindex="-1"
 		>
 			{#if title}
 				<div class="flex items-center justify-between border-b border-gray-200 px-4 py-3">
@@ -49,7 +93,7 @@
 						type="button"
 						onclick={handleClose}
 						class="text-gray-400 hover:text-gray-500"
-						aria-label="Fermer"
+						aria-label={closeLabel}
 					>
 						<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path

@@ -12,10 +12,17 @@
 		data: T[];
 		columns: Column<T>[];
 		emptyMessage?: string;
+		keyField?: keyof T;
 		onrowclick?: (item: T) => void;
 	}
 
-	let { data, columns, emptyMessage = 'Aucune donnee', onrowclick }: Props<T> = $props();
+	let {
+		data,
+		columns,
+		emptyMessage = 'Aucune donnee',
+		keyField = 'id' as keyof T,
+		onrowclick
+	}: Props<T> = $props();
 
 	function getValue(item: T, key: keyof T | string): unknown {
 		if (typeof key === 'string' && key.includes('.')) {
@@ -24,6 +31,13 @@
 				.reduce<unknown>((obj, k) => (obj as Record<string, unknown>)?.[k], item);
 		}
 		return item[key as keyof T];
+	}
+
+	function handleRowKeydown(e: KeyboardEvent, item: T) {
+		if (onrowclick && (e.key === 'Enter' || e.key === ' ')) {
+			e.preventDefault();
+			onrowclick(item);
+		}
 	}
 </script>
 
@@ -48,10 +62,13 @@
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-gray-200">
-				{#each data as item, i (i)}
+				{#each data as item (item[keyField])}
 					<tr
 						class={onrowclick ? 'cursor-pointer hover:bg-gray-50' : ''}
 						onclick={() => onrowclick?.(item)}
+						onkeydown={(e) => handleRowKeydown(e, item)}
+						role={onrowclick ? 'button' : undefined}
+						tabindex={onrowclick ? 0 : undefined}
 					>
 						{#each columns as col (col.key)}
 							<td class="px-4 py-3 text-sm whitespace-nowrap text-gray-900 {col.class ?? ''}">
@@ -69,11 +86,14 @@
 
 		<!-- Mobile cards -->
 		<div class="divide-y divide-gray-200 md:hidden">
-			{#each data as item, i (i)}
-				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+			{#each data as item (item[keyField])}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
 					class="p-4 {onrowclick ? 'cursor-pointer hover:bg-gray-50' : ''}"
 					onclick={() => onrowclick?.(item)}
+					onkeydown={(e) => handleRowKeydown(e, item)}
+					role={onrowclick ? 'button' : undefined}
+					tabindex={onrowclick ? 0 : undefined}
 				>
 					{#each columns as col (col.key)}
 						<div class="flex justify-between py-1">
