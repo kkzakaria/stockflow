@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { db } from '$lib/server/db';
 import { auditLogs, user } from '$lib/server/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -28,6 +28,10 @@ function seedTestData() {
 describe('auditService', () => {
 	beforeEach(() => {
 		seedTestData();
+	});
+
+	afterAll(() => {
+		cleanupTestData();
 	});
 
 	describe('log', () => {
