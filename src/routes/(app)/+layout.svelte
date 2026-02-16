@@ -2,6 +2,7 @@
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
 	import Header from '$lib/components/layout/Header.svelte';
 	import BottomNav from '$lib/components/layout/BottomNav.svelte';
+	import OfflineBanner from '$lib/components/layout/OfflineBanner.svelte';
 	import { Toast } from '$lib/components/ui';
 
 	let { data, children } = $props();
@@ -13,6 +14,7 @@
 	<Sidebar role={data.user.role ?? 'viewer'} />
 
 	<div class="flex flex-1 flex-col overflow-hidden">
+		<OfflineBanner />
 		<Header userName={data.user.name} />
 
 		<main class="flex-1 overflow-y-auto p-4 pb-20 lg:pb-4">
