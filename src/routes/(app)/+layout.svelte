@@ -15,7 +15,7 @@
 
 	<div class="flex flex-1 flex-col overflow-hidden">
 		<OfflineBanner />
-		<Header userName={data.user.name} />
+		<Header userName={data.user.name} unreadCount={data.unreadAlertCount} />
 
 		<main class="flex-1 overflow-y-auto p-4 pb-20 lg:pb-4">
 			{@render children()}
