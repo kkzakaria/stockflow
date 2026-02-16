@@ -50,6 +50,7 @@ export default defineConfig({
 				test: {
 					name: 'server',
 					environment: 'node',
+					fileParallelism: false,
 					include: ['src/**/*.{test,spec}.{js,ts}'],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 				}

@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 
-	const { userName }: { userName: string } = $props();
+	const { userName, unreadCount = 0 }: { userName: string; unreadCount?: number } = $props();
 
 	let showMenu = $state(false);
 
@@ -21,6 +21,13 @@
 	<div class="flex items-center gap-4">
 		<a href={resolve('/alerts')} class="relative text-gray-500 hover:text-gray-700">
 			<span class="text-xl">🔔</span>
+			{#if unreadCount > 0}
+				<span
+					class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white"
+				>
+					{unreadCount > 9 ? '9+' : unreadCount}
+				</span>
+			{/if}
 		</a>
 
 		<div class="relative">

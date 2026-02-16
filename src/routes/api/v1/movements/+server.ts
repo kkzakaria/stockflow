@@ -6,6 +6,7 @@ import { requireAuth, getUserWarehouseIds, requireWarehouseAccess } from '$lib/s
 import { canWrite, type Role } from '$lib/server/auth/rbac';
 import { createMovementSchema, MOVEMENT_TYPES } from '$lib/validators/movement';
 import { stockService } from '$lib/server/services/stock';
+import { alertService } from '$lib/server/services/alerts';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
@@ -110,6 +111,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			...parsed.data,
 			userId: user.id
 		});
+
+		// Check if stock dropped below minimum and trigger alert
+		const stockCheck = stockService.checkMinStock(parsed.data.productId, parsed.data.warehouseId);
+		if (stockCheck && stockCheck.isBelowMin) {
+			alertService.createStockAlert(
+				parsed.data.productId,
+				parsed.data.warehouseId,
+				stockCheck.currentQty,
+				stockCheck.threshold
+			);
+		}
 
 		return json({ data: movement }, { status: 201 });
 	} catch (err) {
