@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '$lib/server/db';
-import { products, warehouses, productWarehouse, movements, user } from '$lib/server/db/schema';
-import { eq, and } from 'drizzle-orm';
+import {
+	alerts,
+	products,
+	warehouses,
+	productWarehouse,
+	movements,
+	user
+} from '$lib/server/db/schema';
+import { eq, and, or } from 'drizzle-orm';
 import { stockService } from './stock';
 
 // Test fixtures
@@ -10,6 +17,10 @@ const TEST_WAREHOUSE_ID = 'test-wh-001';
 const TEST_PRODUCT_ID = 'test-prod-001';
 
 function cleanupTestData() {
+	// Delete alerts that may reference our test data (created by alert integration in other tests)
+	db.delete(alerts).where(eq(alerts.userId, TEST_USER_ID)).run();
+	db.delete(alerts).where(eq(alerts.productId, TEST_PRODUCT_ID)).run();
+	db.delete(alerts).where(eq(alerts.warehouseId, TEST_WAREHOUSE_ID)).run();
 	db.delete(movements).where(eq(movements.userId, TEST_USER_ID)).run();
 	db.delete(productWarehouse)
 		.where(eq(productWarehouse.productId, TEST_PRODUCT_ID))

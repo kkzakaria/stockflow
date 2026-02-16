@@ -113,7 +113,7 @@ describe('auditService', () => {
 				.from(auditLogs)
 				.where(
 					and(
-						eq(auditLogs.action, 'login' as typeof entry.action),
+						eq(auditLogs.action, 'login' as (typeof auditLogs.action.enumValues)[number]),
 						eq(auditLogs.entityId, TEST_USER_ID)
 					)
 				)

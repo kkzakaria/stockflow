@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { db } from '$lib/server/db';
 import {
+	alerts,
 	products,
 	warehouses,
 	productWarehouse,
@@ -9,7 +10,7 @@ import {
 	transferItems,
 	user
 } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, or, sql } from 'drizzle-orm';
 import { stockService } from './stock';
 import { transferService } from './transfers';
 
@@ -25,6 +26,19 @@ const TEST_PRODUCT_B_ID = 'trf-test-prod-b';
 
 function cleanupTestData() {
 	// Order matters: delete child rows first due to FK constraints
+	// Delete ALL alerts that reference transfers (since we delete all transfers below)
+	// Alert integration creates alerts for ALL admin users, not just test users
+	db.delete(alerts)
+		.where(
+			or(
+				eq(alerts.userId, TEST_USER_ID),
+				eq(alerts.userId, TEST_APPROVER_ID),
+				eq(alerts.userId, TEST_SHIPPER_ID),
+				eq(alerts.userId, TEST_RECEIVER_ID),
+				sql`${alerts.transferId} IS NOT NULL`
+			)
+		)
+		.run();
 	db.delete(transferItems).run();
 	db.delete(transfers).run();
 	db.delete(movements).where(eq(movements.userId, TEST_USER_ID)).run();
