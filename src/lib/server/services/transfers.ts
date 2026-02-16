@@ -2,11 +2,15 @@ import { db } from '$lib/server/db';
 import {
 	transfers,
 	transferItems,
-	productWarehouse
+	productWarehouse,
+	user,
+	userWarehouses
 } from '$lib/server/db/schema';
 import { eq, and, or, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { stockService } from './stock';
+import { alertService } from './alerts';
+import { hasGlobalScope, type Role } from '$lib/server/auth/rbac';
 
 // ============================================================================
 // Types
@@ -147,7 +151,7 @@ export const transferService = {
 	},
 
 	approve(transferId: string, approvedBy: string) {
-		return db.transaction((tx) => {
+		const txResult = db.transaction((tx) => {
 			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
 			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
 
@@ -163,12 +167,22 @@ export const transferService = {
 				.run();
 
 			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
-			return updated;
+			return { result: updated, requestedBy: transfer.requestedBy };
 		});
+
+		// Alert requester AFTER transaction completes
+		alertService.createTransferAlert(
+			transferId,
+			'transfer_approved',
+			`Transfert approuve par ${approvedBy}`,
+			[txResult.requestedBy]
+		);
+
+		return txResult.result;
 	},
 
 	reject(transferId: string, rejectedBy: string, reason: string) {
-		return db.transaction((tx) => {
+		const txResult = db.transaction((tx) => {
 			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
 			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
 
@@ -184,12 +198,22 @@ export const transferService = {
 				.run();
 
 			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
-			return updated;
+			return { result: updated, requestedBy: transfer.requestedBy };
 		});
+
+		// Alert requester AFTER transaction completes
+		alertService.createTransferAlert(
+			transferId,
+			'transfer_pending',
+			`Transfert rejete: ${reason}`,
+			[txResult.requestedBy]
+		);
+
+		return txResult.result;
 	},
 
 	ship(transferId: string, shippedBy: string) {
-		return db.transaction((tx) => {
+		const txResult = db.transaction((tx) => {
 			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
 			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
 
@@ -230,12 +254,39 @@ export const transferService = {
 				.run();
 
 			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
-			return updated;
+			return { result: updated, destinationWarehouseId: transfer.destinationWarehouseId };
 		});
+
+		// Alert destination warehouse managers and admins AFTER transaction completes
+		const globalUsers = db
+			.select({ id: user.id, role: user.role })
+			.from(user)
+			.where(eq(user.isActive, true))
+			.all()
+			.filter((u) => hasGlobalScope(u.role as Role));
+
+		const destWarehouseUsers = db
+			.select({ userId: userWarehouses.userId })
+			.from(userWarehouses)
+			.where(eq(userWarehouses.warehouseId, txResult.destinationWarehouseId))
+			.all();
+
+		const targetUserIds = new Set<string>();
+		for (const u of globalUsers) targetUserIds.add(u.id);
+		for (const uw of destWarehouseUsers) targetUserIds.add(uw.userId);
+
+		alertService.createTransferAlert(
+			transferId,
+			'transfer_shipped',
+			`Transfert expedie, en attente de reception`,
+			[...targetUserIds]
+		);
+
+		return txResult.result;
 	},
 
 	receive(transferId: string, receivedBy: string, data: ReceiveInput) {
-		return db.transaction((tx) => {
+		const txResult = db.transaction((tx) => {
 			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
 			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
 
@@ -327,8 +378,36 @@ export const transferService = {
 			}
 
 			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
-			return updated;
+			return { result: updated, isPartial };
 		});
+
+		// Alert admins about received/disputed AFTER transaction completes
+		const globalUsers = db
+			.select({ id: user.id, role: user.role })
+			.from(user)
+			.where(eq(user.isActive, true))
+			.all()
+			.filter((u) => hasGlobalScope(u.role as Role));
+
+		const targetIds = globalUsers.map((u) => u.id);
+
+		if (txResult.isPartial) {
+			alertService.createTransferAlert(
+				transferId,
+				'transfer_dispute',
+				`Litige: reception partielle du transfert`,
+				targetIds
+			);
+		} else {
+			alertService.createTransferAlert(
+				transferId,
+				'transfer_received',
+				`Transfert recu avec succes`,
+				targetIds
+			);
+		}
+
+		return txResult.result;
 	},
 
 	cancel(transferId: string, cancelledBy: string) {
