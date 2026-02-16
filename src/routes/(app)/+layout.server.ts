@@ -7,7 +7,12 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		redirect(302, '/login');
 	}
 
-	const unreadAlertCount = alertService.getUnreadCount(locals.user.id);
+	let unreadAlertCount = 0;
+	try {
+		unreadAlertCount = alertService.getUnreadCount(locals.user.id);
+	} catch (err) {
+		console.error('Failed to fetch unread alert count:', err);
+	}
 
 	return {
 		user: {

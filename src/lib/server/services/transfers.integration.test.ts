@@ -33,11 +33,22 @@ function cleanupTestData() {
 	for (const uid of ALL_USER_IDS) {
 		db.delete(alerts).where(eq(alerts.userId, uid)).run();
 	}
-	db.delete(alerts)
-		.where(sql`${alerts.transferId} IS NOT NULL`)
-		.run();
-	db.delete(transferItems).run();
-	db.delete(transfers).run();
+	// Scope cleanup to transfers created by this test suite
+	const integTransfers = db
+		.select({ id: transfers.id })
+		.from(transfers)
+		.where(
+			or(
+				eq(transfers.sourceWarehouseId, SOURCE_WH_ID),
+				eq(transfers.destinationWarehouseId, DEST_WH_ID)
+			)
+		)
+		.all();
+	for (const t of integTransfers) {
+		db.delete(alerts).where(eq(alerts.transferId, t.id)).run();
+		db.delete(transferItems).where(eq(transferItems.transferId, t.id)).run();
+		db.delete(transfers).where(eq(transfers.id, t.id)).run();
+	}
 	for (const uid of ALL_USER_IDS) {
 		db.delete(movements).where(eq(movements.userId, uid)).run();
 	}

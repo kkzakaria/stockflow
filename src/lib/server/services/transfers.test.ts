@@ -39,8 +39,23 @@ function cleanupTestData() {
 			)
 		)
 		.run();
-	db.delete(transferItems).run();
-	db.delete(transfers).run();
+	// Scope cleanup to transfers created by this test suite (via source/dest warehouse IDs)
+	const testTransfers = db
+		.select({ id: transfers.id })
+		.from(transfers)
+		.where(
+			or(
+				eq(transfers.sourceWarehouseId, TEST_SOURCE_WH_ID),
+				eq(transfers.destinationWarehouseId, TEST_DEST_WH_ID)
+			)
+		)
+		.all();
+	for (const t of testTransfers) {
+		db.delete(transferItems).where(eq(transferItems.transferId, t.id)).run();
+	}
+	for (const t of testTransfers) {
+		db.delete(transfers).where(eq(transfers.id, t.id)).run();
+	}
 	db.delete(movements).where(eq(movements.userId, TEST_USER_ID)).run();
 	db.delete(movements).where(eq(movements.userId, TEST_SHIPPER_ID)).run();
 	db.delete(movements).where(eq(movements.userId, TEST_RECEIVER_ID)).run();

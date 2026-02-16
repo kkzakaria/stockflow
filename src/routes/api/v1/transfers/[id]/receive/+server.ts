@@ -36,6 +36,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		if (msg === 'TRANSFER_NOT_FOUND') throw error(404, 'Transfer not found');
 		if (msg === 'INVALID_TRANSITION') throw error(409, 'Invalid status transition');
 		if (msg === 'TRANSFER_ITEM_NOT_FOUND') throw error(400, 'Transfer item not found');
+		if (msg === 'SOURCE_PUMP_NOT_FOUND') throw error(400, 'Source warehouse PUMP data not found');
+		console.error(`[transfers/${params.id}/receive]`, e);
 		throw error(500, 'Internal error');
 	}
 };

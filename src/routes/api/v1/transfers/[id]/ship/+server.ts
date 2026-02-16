@@ -23,6 +23,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		if (msg === 'TRANSFER_NOT_FOUND') throw error(404, 'Transfer not found');
 		if (msg === 'INVALID_TRANSITION') throw error(409, 'Invalid status transition');
 		if (msg === 'INSUFFICIENT_STOCK') throw error(409, 'Insufficient stock for shipment');
+		console.error(`[transfers/${params.id}/ship]`, e);
 		throw error(500, 'Internal error');
 	}
 };

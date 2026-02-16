@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
 import { inventories, inventoryItems, productWarehouse } from '$lib/server/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { stockService } from './stock';
 
@@ -115,65 +115,68 @@ export const inventoryService = {
 	},
 
 	validate(inventoryId: string, validatedBy: string) {
-		const [inventory] = db
-			.select()
-			.from(inventories)
-			.where(eq(inventories.id, inventoryId))
-			.all();
+		return db.transaction((tx) => {
+			const [inventory] = tx
+				.select()
+				.from(inventories)
+				.where(eq(inventories.id, inventoryId))
+				.all();
 
-		if (!inventory) {
-			throw new Error('INVENTORY_NOT_FOUND');
-		}
-
-		if (inventory.status !== 'in_progress') {
-			throw new Error('INVENTORY_ALREADY_VALIDATED');
-		}
-
-		const items = db
-			.select()
-			.from(inventoryItems)
-			.where(eq(inventoryItems.inventoryId, inventoryId))
-			.all();
-
-		// Check all items have been counted
-		const uncounted = items.filter((item) => item.countedQuantity === null);
-		if (uncounted.length > 0) {
-			throw new Error('INCOMPLETE_COUNT');
-		}
-
-		// Create adjustment movements for items with differences
-		for (const item of items) {
-			if (item.difference !== null && item.difference !== 0) {
-				const type = item.difference > 0 ? 'adjustment_in' : 'adjustment_out';
-				stockService.recordMovement({
-					productId: item.productId,
-					warehouseId: inventory.warehouseId,
-					type,
-					quantity: Math.abs(item.difference),
-					reason: 'ajustement',
-					userId: validatedBy,
-					reference: `INV-${inventoryId}`
-				});
+			if (!inventory) {
+				throw new Error('INVENTORY_NOT_FOUND');
 			}
-		}
 
-		// Update inventory status
-		db.update(inventories)
-			.set({
-				status: 'validated',
-				validatedBy,
-				validatedAt: new Date().toISOString()
-			})
-			.where(eq(inventories.id, inventoryId))
-			.run();
+			if (inventory.status !== 'in_progress') {
+				throw new Error('INVENTORY_ALREADY_VALIDATED');
+			}
 
-		const [updated] = db
-			.select()
-			.from(inventories)
-			.where(eq(inventories.id, inventoryId))
-			.all();
+			const items = tx
+				.select()
+				.from(inventoryItems)
+				.where(eq(inventoryItems.inventoryId, inventoryId))
+				.all();
 
-		return updated;
+			// Check all items have been counted
+			const uncounted = items.filter((item) => item.countedQuantity === null);
+			if (uncounted.length > 0) {
+				throw new Error('INCOMPLETE_COUNT');
+			}
+
+			// Create adjustment movements for items with differences.
+			// stockService.recordMovement opens its own transaction, which creates
+			// a nested savepoint within this outer transaction for atomicity.
+			for (const item of items) {
+				if (item.difference !== null && item.difference !== 0) {
+					const type = item.difference > 0 ? 'adjustment_in' : 'adjustment_out';
+					stockService.recordMovement({
+						productId: item.productId,
+						warehouseId: inventory.warehouseId,
+						type,
+						quantity: Math.abs(item.difference),
+						reason: 'ajustement',
+						userId: validatedBy,
+						reference: `INV-${inventoryId}`
+					});
+				}
+			}
+
+			tx.update(inventories)
+				.set({
+					status: 'validated',
+					validatedBy,
+					validatedAt: new Date().toISOString()
+				})
+				.where(eq(inventories.id, inventoryId))
+				.run();
+
+			const [updated] = tx
+				.select()
+				.from(inventories)
+				.where(eq(inventories.id, inventoryId))
+				.all();
+
+			return updated;
+		});
 	},
 
 	getById(inventoryId: string) {

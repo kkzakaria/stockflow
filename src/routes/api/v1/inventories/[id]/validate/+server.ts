@@ -25,6 +25,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		if (msg === 'INVENTORY_ALREADY_VALIDATED') throw error(409, 'Inventory already validated');
 		if (msg === 'INCOMPLETE_COUNT')
 			throw error(400, 'All items must be counted before validation');
+		console.error(`[inventories/${params.id}/validate]`, e);
 		throw error(500, 'Internal error');
 	}
 };

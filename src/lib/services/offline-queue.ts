@@ -73,15 +73,21 @@ async function flush(): Promise<{ succeeded: number; failed: number }> {
 				await txPromise(db, 'readwrite', (store) => store.delete(op.id!));
 				succeeded++;
 			} else if (response.status >= 400 && response.status < 500) {
-				// 4xx — client error (invalid data), remove from queue
+				// 4xx — client error (invalid data), remove from queue but log the failure
+				const responseBody = await response.text().catch(() => 'Unknown error');
+				console.error(
+					`[offline-queue] Operation failed (${response.status}):`,
+					op.method, op.url, responseBody
+				);
 				await txPromise(db, 'readwrite', (store) => store.delete(op.id!));
 				failed++;
 			} else {
 				// 5xx — server error, stop flushing (retry later)
 				break;
 			}
-		} catch {
-			// Network error — stop flushing (retry later)
+		} catch (err) {
+			// Network or unexpected error — stop flushing (retry later)
+			console.warn('[offline-queue] Flush stopped due to error:', err);
 			break;
 		}
 	}
@@ -115,6 +121,12 @@ export const offlineQueue = {
 // Auto-flush when coming back online
 if (browser) {
 	window.addEventListener('online', () => {
-		offlineQueue.flush();
+		offlineQueue.flush().then((result) => {
+			if (result.failed > 0) {
+				console.warn(`[offline-queue] ${result.failed} operation(s) failed during sync`);
+			}
+		}).catch((err) => {
+			console.error('[offline-queue] Auto-flush failed:', err);
+		});
 	});
 }

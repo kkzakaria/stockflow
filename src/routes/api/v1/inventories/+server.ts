@@ -91,9 +91,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		return json({ data: inventory }, { status: 201 });
 	} catch (err) {
-		if (err instanceof Error) {
-			throw error(500, err.message);
-		}
+		console.error('[POST /api/v1/inventories]', err);
 		throw error(500, 'Internal error');
 	}
 };

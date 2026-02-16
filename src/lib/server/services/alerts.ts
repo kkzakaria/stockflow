@@ -7,6 +7,7 @@ export type AlertType =
 	| 'low_stock'
 	| 'transfer_pending'
 	| 'transfer_approved'
+	| 'transfer_rejected'
 	| 'transfer_shipped'
 	| 'transfer_received'
 	| 'transfer_dispute'
@@ -39,11 +40,19 @@ export const alertService = {
 		return alert;
 	},
 
-	getUserAlerts(userId: string, limit = 50, offset = 0) {
+	getUserAlerts(userId: string, limit = 50, offset = 0, typeFilter?: string) {
+		const conditions = [eq(alerts.userId, userId)];
+
+		if (typeFilter) {
+			conditions.push(
+				eq(alerts.type, typeFilter as (typeof alerts.type.enumValues)[number])
+			);
+		}
+
 		return db
 			.select()
 			.from(alerts)
-			.where(eq(alerts.userId, userId))
+			.where(and(...conditions))
 			.orderBy(desc(alerts.createdAt))
 			.limit(limit)
 			.offset(offset)

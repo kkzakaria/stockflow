@@ -6,7 +6,7 @@ import {
 	user,
 	userWarehouses
 } from '$lib/server/db/schema';
-import { eq, and, or, sql } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { stockService } from './stock';
 import { alertService } from './alerts';
@@ -61,15 +61,16 @@ interface ListFilters {
 // State machine: valid transitions
 // ============================================================================
 
-const VALID_TRANSITIONS: Record<string, TransferStatus[]> = {
+// Transfer state machine. Terminal states: received, rejected, cancelled, resolved.
+// Partial receipts transition shipped → disputed directly (partially_received is not persisted).
+const VALID_TRANSITIONS: Partial<Record<TransferStatus, TransferStatus[]>> = {
 	pending: ['approved', 'rejected', 'cancelled'],
 	approved: ['shipped', 'cancelled'],
-	shipped: ['received', 'partially_received'],
-	partially_received: ['disputed'],
+	shipped: ['received', 'disputed'],
 	disputed: ['resolved']
 };
 
-function assertTransition(currentStatus: string, targetStatus: TransferStatus): void {
+function assertTransition(currentStatus: TransferStatus, targetStatus: TransferStatus): void {
 	const allowed = VALID_TRANSITIONS[currentStatus];
 	if (!allowed || !allowed.includes(targetStatus)) {
 		throw new Error('INVALID_TRANSITION');
@@ -171,12 +172,16 @@ export const transferService = {
 		});
 
 		// Alert requester AFTER transaction completes
-		alertService.createTransferAlert(
-			transferId,
-			'transfer_approved',
-			`Transfert approuve par ${approvedBy}`,
-			[txResult.requestedBy]
-		);
+		try {
+			alertService.createTransferAlert(
+				transferId,
+				'transfer_approved',
+				`Transfert approuve par ${approvedBy}`,
+				[txResult.requestedBy]
+			);
+		} catch (alertErr) {
+			console.error(`Failed to create approval alert for transfer ${transferId}:`, alertErr);
+		}
 
 		return txResult.result;
 	},
@@ -202,12 +207,16 @@ export const transferService = {
 		});
 
 		// Alert requester AFTER transaction completes
-		alertService.createTransferAlert(
-			transferId,
-			'transfer_pending',
-			`Transfert rejete: ${reason}`,
-			[txResult.requestedBy]
-		);
+		try {
+			alertService.createTransferAlert(
+				transferId,
+				'transfer_rejected',
+				`Transfert rejete: ${reason}`,
+				[txResult.requestedBy]
+			);
+		} catch (alertErr) {
+			console.error(`Failed to create rejection alert for transfer ${transferId}:`, alertErr);
+		}
 
 		return txResult.result;
 	},
@@ -275,12 +284,16 @@ export const transferService = {
 		for (const u of globalUsers) targetUserIds.add(u.id);
 		for (const uw of destWarehouseUsers) targetUserIds.add(uw.userId);
 
-		alertService.createTransferAlert(
-			transferId,
-			'transfer_shipped',
-			`Transfert expedie, en attente de reception`,
-			[...targetUserIds]
-		);
+		try {
+			alertService.createTransferAlert(
+				transferId,
+				'transfer_shipped',
+				`Transfert expedie, en attente de reception`,
+				[...targetUserIds]
+			);
+		} catch (alertErr) {
+			console.error(`Failed to create shipment alert for transfer ${transferId}:`, alertErr);
+		}
 
 		return txResult.result;
 	},
@@ -290,6 +303,7 @@ export const transferService = {
 			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
 			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
 
+			// Validate shipped status allows receiving (both 'received' and 'disputed' are valid targets)
 			assertTransition(transfer.status, 'received');
 
 			const allItems = tx
@@ -327,7 +341,10 @@ export const transferService = {
 					)
 					.all();
 
-				const purchasePrice = sourcePw?.pump ?? 0;
+				if (!sourcePw || sourcePw.pump === null || sourcePw.pump === undefined) {
+					throw new Error('SOURCE_PUMP_NOT_FOUND');
+				}
+				const purchasePrice = sourcePw.pump;
 
 				// Increment destination stock
 				stockService.recordMovement({
@@ -355,7 +372,7 @@ export const transferService = {
 			const now = new Date().toISOString();
 
 			if (isPartial) {
-				// Auto-transition: shipped → partially_received → disputed
+				// Partial receipt: transition directly to 'disputed' (partially_received is not persisted)
 				const disputeReason = `Partial receipt: ${anomalyParts.join('; ')}`;
 				tx.update(transfers)
 					.set({
@@ -391,20 +408,24 @@ export const transferService = {
 
 		const targetIds = globalUsers.map((u) => u.id);
 
-		if (txResult.isPartial) {
-			alertService.createTransferAlert(
-				transferId,
-				'transfer_dispute',
-				`Litige: reception partielle du transfert`,
-				targetIds
-			);
-		} else {
-			alertService.createTransferAlert(
-				transferId,
-				'transfer_received',
-				`Transfert recu avec succes`,
-				targetIds
-			);
+		try {
+			if (txResult.isPartial) {
+				alertService.createTransferAlert(
+					transferId,
+					'transfer_dispute',
+					`Litige: reception partielle du transfert`,
+					targetIds
+				);
+			} else {
+				alertService.createTransferAlert(
+					transferId,
+					'transfer_received',
+					`Transfert recu avec succes`,
+					targetIds
+				);
+			}
+		} catch (alertErr) {
+			console.error(`Failed to create receive alert for transfer ${transferId}:`, alertErr);
 		}
 
 		return txResult.result;
@@ -432,6 +453,8 @@ export const transferService = {
 		});
 	},
 
+	// TODO: data.adjustStock is accepted but not yet implemented. When true, it should
+	// create stock adjustment movements to reconcile sent vs received quantities.
 	resolveDispute(transferId: string, resolvedBy: string, data: ResolveDisputeInput) {
 		return db.transaction((tx) => {
 			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();

@@ -32,6 +32,7 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';
 		if (msg === 'INVENTORY_ITEM_NOT_FOUND') throw error(404, 'Inventory item not found');
+		console.error(`[inventories/${params.id}/items/${params.itemId}]`, e);
 		throw error(500, 'Internal error');
 	}
 };

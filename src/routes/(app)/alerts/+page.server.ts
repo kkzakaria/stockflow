@@ -9,15 +9,11 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const offset = (page - 1) * limit;
 	const typeFilter = url.searchParams.get('type') ?? '';
 
-	const alerts = alertService.getUserAlerts(user.id, limit, offset);
+	const userAlerts = alertService.getUserAlerts(user.id, limit, offset, typeFilter || undefined);
 	const unreadCount = alertService.getUnreadCount(user.id);
 
-	const filteredAlerts = typeFilter
-		? alerts.filter((a) => a.type === typeFilter || a.type.startsWith(typeFilter))
-		: alerts;
-
 	return {
-		alerts: filteredAlerts,
+		alerts: userAlerts,
 		unreadCount,
 		pagination: { page, limit },
 		typeFilter

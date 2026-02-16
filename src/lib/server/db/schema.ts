@@ -305,6 +305,7 @@ export const alerts = sqliteTable(
 				'low_stock',
 				'transfer_pending',
 				'transfer_approved',
+				'transfer_rejected',
 				'transfer_shipped',
 				'transfer_received',
 				'transfer_dispute',

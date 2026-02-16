@@ -24,6 +24,7 @@
 		low_stock: { icon: '📦', label: 'Stock bas', variant: 'danger' },
 		transfer_pending: { icon: '🔄', label: 'Transfert en attente', variant: 'warning' },
 		transfer_approved: { icon: '✅', label: 'Transfert approuvé', variant: 'success' },
+		transfer_rejected: { icon: '❌', label: 'Transfert rejeté', variant: 'danger' },
 		transfer_shipped: { icon: '🚚', label: 'Transfert expédié', variant: 'info' },
 		transfer_received: { icon: '📥', label: 'Transfert reçu', variant: 'success' },
 		transfer_dispute: { icon: '⚠️', label: 'Litige transfert', variant: 'danger' },

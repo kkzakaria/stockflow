@@ -29,6 +29,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const msg = e instanceof Error ? e.message : '';
 		if (msg === 'TRANSFER_NOT_FOUND') throw error(404, 'Transfer not found');
 		if (msg === 'INVALID_TRANSITION') throw error(409, 'Invalid status transition');
+		console.error(`[transfers/${params.id}/resolve]`, e);
 		throw error(500, 'Internal error');
 	}
 };
