@@ -308,7 +308,7 @@ export const transferService = {
 				const disputeReason = `Partial receipt: ${anomalyParts.join('; ')}`;
 				tx.update(transfers)
 					.set({
-						status: sql`'disputed'`,
+						status: 'disputed' as typeof transfers.status.enumValues[number],
 						receivedBy,
 						receivedAt: now,
 						disputeReason
@@ -367,7 +367,7 @@ export const transferService = {
 
 			tx.update(transfers)
 				.set({
-					status: sql`'resolved'`,
+					status: 'resolved' as typeof transfers.status.enumValues[number],
 					disputeResolvedBy: resolvedBy,
 					disputeResolvedAt: now,
 					notes: updatedNotes

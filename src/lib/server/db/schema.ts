@@ -221,7 +221,8 @@ export const transfers = sqliteTable(
 				'received',
 				'partially_received',
 				'cancelled',
-				'disputed'
+				'disputed',
+				'resolved'
 			]
 		})
 			.notNull()
