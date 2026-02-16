@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { db } from '$lib/server/db';
-import { alerts, user, warehouses, userWarehouses, products } from '$lib/server/db/schema';
+import {
+	alerts,
+	user,
+	warehouses,
+	userWarehouses,
+	products,
+	transfers
+} from '$lib/server/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { alertService } from './alerts';
 
@@ -12,7 +19,9 @@ const TEST_ADMIN_MGR_ID = 'test-alert-admin-mgr-001';
 const TEST_ADMIN_VIEWER_ID = 'test-alert-admin-viewer-001';
 const TEST_WH_USER_ID = 'test-alert-wh-user-001';
 const TEST_WAREHOUSE_ID = 'test-alert-wh-001';
+const TEST_WAREHOUSE2_ID = 'test-alert-wh-002';
 const TEST_PRODUCT_ID = 'test-alert-prod-001';
+const TEST_TRANSFER_ID = 'test-alert-transfer-001';
 
 const ALL_TEST_USER_IDS = [
 	TEST_USER_ID,
@@ -33,12 +42,14 @@ function cleanupTestData() {
 	db.delete(alerts).where(eq(alerts.productId, TEST_PRODUCT_ID)).run();
 	db.delete(alerts).where(eq(alerts.warehouseId, TEST_WAREHOUSE_ID)).run();
 
+	db.delete(transfers).where(eq(transfers.id, TEST_TRANSFER_ID)).run();
 	db.delete(userWarehouses).where(eq(userWarehouses.warehouseId, TEST_WAREHOUSE_ID)).run();
 	for (const uid of ALL_TEST_USER_IDS) {
 		db.delete(user).where(eq(user.id, uid)).run();
 	}
 	db.delete(products).where(eq(products.id, TEST_PRODUCT_ID)).run();
 	db.delete(warehouses).where(eq(warehouses.id, TEST_WAREHOUSE_ID)).run();
+	db.delete(warehouses).where(eq(warehouses.id, TEST_WAREHOUSE2_ID)).run();
 }
 
 function seedTestData() {
@@ -71,9 +82,12 @@ function seedTestData() {
 		])
 		.run();
 
-	// Warehouse
+	// Warehouses
 	db.insert(warehouses)
-		.values({ id: TEST_WAREHOUSE_ID, name: 'Alert Test Warehouse' })
+		.values([
+			{ id: TEST_WAREHOUSE_ID, name: 'Alert Test Warehouse' },
+			{ id: TEST_WAREHOUSE2_ID, name: 'Alert Test Warehouse 2' }
+		])
 		.run();
 
 	// Product
@@ -89,6 +103,17 @@ function seedTestData() {
 	// Assign warehouse user to the warehouse
 	db.insert(userWarehouses)
 		.values({ userId: TEST_WH_USER_ID, warehouseId: TEST_WAREHOUSE_ID })
+		.run();
+
+	// Transfer (needed for createTransferAlert FK)
+	db.insert(transfers)
+		.values({
+			id: TEST_TRANSFER_ID,
+			sourceWarehouseId: TEST_WAREHOUSE_ID,
+			destinationWarehouseId: TEST_WAREHOUSE2_ID,
+			status: 'pending',
+			requestedBy: TEST_USER_ID
+		})
 		.run();
 }
 
@@ -361,6 +386,25 @@ describe('alertService', () => {
 				.all();
 
 			expect(adminAlerts).toHaveLength(1);
+		});
+	});
+
+	describe('createTransferAlert', () => {
+		it('creates alerts for each target user', () => {
+			alertService.createTransferAlert(
+				TEST_TRANSFER_ID,
+				'transfer_pending',
+				'New transfer pending approval',
+				[TEST_ADMIN_ID, TEST_USER2_ID]
+			);
+
+			const adminAlerts = alertService.getUserAlerts(TEST_ADMIN_ID);
+			const managerAlerts = alertService.getUserAlerts(TEST_USER2_ID);
+			expect(adminAlerts).toHaveLength(1);
+			expect(adminAlerts[0].type).toBe('transfer_pending');
+			expect(adminAlerts[0].transferId).toBe(TEST_TRANSFER_ID);
+			expect(adminAlerts[0].message).toBe('New transfer pending approval');
+			expect(managerAlerts).toHaveLength(1);
 		});
 	});
 });
