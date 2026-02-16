@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray, type SQL } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { products, productWarehouse, warehouses } from '$lib/server/db/schema';
 import { requireAuth, getUserWarehouseIds } from '$lib/server/auth/guards';
@@ -18,9 +18,17 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 	if (!product || !product.isActive) error(404, 'Produit introuvable');
 
-	// Stock by warehouse (filtered by user scope)
+	// Stock by warehouse (filtered by user scope in SQL)
 	const warehouseIds = await getUserWarehouseIds(user.id, role);
-	const warehouseStock = await db
+	const stockConditions: SQL[] = [eq(productWarehouse.productId, params.id)];
+	if (warehouseIds !== null && warehouseIds.length > 0) {
+		stockConditions.push(inArray(productWarehouse.warehouseId, warehouseIds));
+	} else if (warehouseIds !== null) {
+		// Scoped user with no warehouses
+		stockConditions.push(sql`0 = 1`);
+	}
+
+	const filteredStock = await db
 		.select({
 			warehouseId: productWarehouse.warehouseId,
 			warehouseName: warehouses.name,
@@ -31,13 +39,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 		})
 		.from(productWarehouse)
 		.innerJoin(warehouses, eq(productWarehouse.warehouseId, warehouses.id))
-		.where(eq(productWarehouse.productId, params.id));
-
-	// Filter by accessible warehouses if not global scope
-	const filteredStock =
-		warehouseIds === null
-			? warehouseStock
-			: warehouseStock.filter((s) => warehouseIds.includes(s.warehouseId));
+		.where(and(...stockConditions));
 
 	const totalStock = filteredStock.reduce((sum, s) => sum + (s.quantity ?? 0), 0);
 	const totalValue = filteredStock.reduce((sum, s) => sum + (s.valuation ?? 0), 0);

@@ -43,6 +43,11 @@ describe('updateProductSchema', () => {
 		const result = updateProductSchema.safeParse({ name: 'New name' });
 		expect(result.success).toBe(true);
 	});
+
+	it('should reject empty object', () => {
+		const result = updateProductSchema.safeParse({});
+		expect(result.success).toBe(false);
+	});
 });
 
 describe('updateProductWarehouseSchema', () => {

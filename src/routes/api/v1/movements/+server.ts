@@ -4,7 +4,7 @@ import { db } from '$lib/server/db';
 import { movements, products, warehouses } from '$lib/server/db/schema';
 import { requireAuth, getUserWarehouseIds, requireWarehouseAccess } from '$lib/server/auth/guards';
 import { canWrite, type Role } from '$lib/server/auth/rbac';
-import { createMovementSchema } from '$lib/validators/movement';
+import { createMovementSchema, MOVEMENT_TYPES } from '$lib/validators/movement';
 import { stockService } from '$lib/server/services/stock';
 import type { RequestHandler } from './$types';
 
@@ -35,8 +35,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	if (productId) conditions.push(eq(movements.productId, productId));
 	if (warehouseId) conditions.push(eq(movements.warehouseId, warehouseId));
-	if (type)
-		conditions.push(eq(movements.type, type as 'in' | 'out' | 'adjustment_in' | 'adjustment_out'));
+	if (type && (MOVEMENT_TYPES as readonly string[]).includes(type))
+		conditions.push(eq(movements.type, type as (typeof MOVEMENT_TYPES)[number]));
 
 	const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 

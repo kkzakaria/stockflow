@@ -130,19 +130,27 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (!cat) error(400, { message: 'Catégorie introuvable' });
 	}
 
-	const [product] = await db
-		.insert(products)
-		.values({
-			sku: parsed.data.sku,
-			name: parsed.data.name,
-			description: parsed.data.description,
-			categoryId: parsed.data.categoryId ?? null,
-			unit: parsed.data.unit,
-			purchasePrice: parsed.data.purchasePrice,
-			salePrice: parsed.data.salePrice,
-			minStock: parsed.data.minStock
-		})
-		.returning();
+	let product;
+	try {
+		[product] = await db
+			.insert(products)
+			.values({
+				sku: parsed.data.sku,
+				name: parsed.data.name,
+				description: parsed.data.description,
+				categoryId: parsed.data.categoryId ?? null,
+				unit: parsed.data.unit,
+				purchasePrice: parsed.data.purchasePrice,
+				salePrice: parsed.data.salePrice,
+				minStock: parsed.data.minStock
+			})
+			.returning();
+	} catch (err) {
+		if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
+			error(409, { message: 'Ce SKU existe déjà' });
+		}
+		throw err;
+	}
 
 	return json({ data: product }, { status: 201 });
 };
