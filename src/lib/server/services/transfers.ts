@@ -1,0 +1,382 @@
+import { db } from '$lib/server/db';
+import {
+	transfers,
+	transferItems,
+	productWarehouse
+} from '$lib/server/db/schema';
+import { eq, and, or, sql } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
+import { stockService } from './stock';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+type TransferStatus =
+	| 'pending'
+	| 'approved'
+	| 'rejected'
+	| 'shipped'
+	| 'received'
+	| 'partially_received'
+	| 'cancelled'
+	| 'disputed'
+	| 'resolved';
+
+interface CreateTransferInput {
+	sourceWarehouseId: string;
+	destinationWarehouseId: string;
+	requestedBy: string;
+	items: { productId: string; quantityRequested: number }[];
+	notes?: string;
+}
+
+interface ReceiveItemInput {
+	transferItemId: string;
+	quantityReceived: number;
+	anomalyNotes?: string;
+}
+
+interface ReceiveInput {
+	items: ReceiveItemInput[];
+}
+
+interface ResolveDisputeInput {
+	resolution: string;
+	adjustStock: boolean;
+}
+
+interface ListFilters {
+	status?: TransferStatus;
+	warehouseId?: string;
+	limit?: number;
+	offset?: number;
+}
+
+// ============================================================================
+// State machine: valid transitions
+// ============================================================================
+
+const VALID_TRANSITIONS: Record<string, TransferStatus[]> = {
+	pending: ['approved', 'rejected', 'cancelled'],
+	approved: ['shipped', 'cancelled'],
+	shipped: ['received', 'partially_received'],
+	partially_received: ['disputed'],
+	disputed: ['resolved']
+};
+
+function assertTransition(currentStatus: string, targetStatus: TransferStatus): void {
+	const allowed = VALID_TRANSITIONS[currentStatus];
+	if (!allowed || !allowed.includes(targetStatus)) {
+		throw new Error('INVALID_TRANSITION');
+	}
+}
+
+// ============================================================================
+// Service
+// ============================================================================
+
+export const transferService = {
+	create(data: CreateTransferInput) {
+		return db.transaction((tx) => {
+			const transferId = nanoid();
+
+			tx.insert(transfers)
+				.values({
+					id: transferId,
+					sourceWarehouseId: data.sourceWarehouseId,
+					destinationWarehouseId: data.destinationWarehouseId,
+					status: 'pending',
+					requestedBy: data.requestedBy,
+					notes: data.notes ?? null
+				})
+				.run();
+
+			for (const item of data.items) {
+				tx.insert(transferItems)
+					.values({
+						id: nanoid(),
+						transferId,
+						productId: item.productId,
+						quantityRequested: item.quantityRequested
+					})
+					.run();
+			}
+
+			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+
+			return transfer;
+		});
+	},
+
+	getById(transferId: string) {
+		const [transfer] = db.select().from(transfers).where(eq(transfers.id, transferId)).all();
+
+		if (!transfer) return null;
+
+		const items = db
+			.select()
+			.from(transferItems)
+			.where(eq(transferItems.transferId, transferId))
+			.all();
+
+		return { ...transfer, items };
+	},
+
+	list(filters?: ListFilters) {
+		const conditions = [];
+
+		if (filters?.status) {
+			conditions.push(eq(transfers.status, filters.status as typeof transfers.status.enumValues[number]));
+		}
+
+		if (filters?.warehouseId) {
+			conditions.push(
+				or(
+					eq(transfers.sourceWarehouseId, filters.warehouseId),
+					eq(transfers.destinationWarehouseId, filters.warehouseId)
+				)!
+			);
+		}
+
+		const where = conditions.length > 0 ? and(...conditions) : undefined;
+		const limit = filters?.limit ?? 50;
+		const offset = filters?.offset ?? 0;
+
+		return db.select().from(transfers).where(where).limit(limit).offset(offset).all();
+	},
+
+	approve(transferId: string, approvedBy: string) {
+		return db.transaction((tx) => {
+			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
+
+			assertTransition(transfer.status, 'approved');
+
+			tx.update(transfers)
+				.set({
+					status: 'approved',
+					approvedBy,
+					approvedAt: new Date().toISOString()
+				})
+				.where(eq(transfers.id, transferId))
+				.run();
+
+			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			return updated;
+		});
+	},
+
+	reject(transferId: string, rejectedBy: string, reason: string) {
+		return db.transaction((tx) => {
+			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
+
+			assertTransition(transfer.status, 'rejected');
+
+			tx.update(transfers)
+				.set({
+					status: 'rejected',
+					rejectionReason: reason,
+					rejectedAt: new Date().toISOString()
+				})
+				.where(eq(transfers.id, transferId))
+				.run();
+
+			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			return updated;
+		});
+	},
+
+	ship(transferId: string, shippedBy: string) {
+		return db.transaction((tx) => {
+			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
+
+			assertTransition(transfer.status, 'shipped');
+
+			const items = tx
+				.select()
+				.from(transferItems)
+				.where(eq(transferItems.transferId, transferId))
+				.all();
+
+			// Decrement source warehouse stock for each item
+			for (const item of items) {
+				stockService.recordMovement({
+					productId: item.productId,
+					warehouseId: transfer.sourceWarehouseId,
+					type: 'out',
+					quantity: item.quantityRequested,
+					reason: 'transfert',
+					userId: shippedBy,
+					reference: `TRF-${transferId}`
+				});
+
+				// Set quantitySent = quantityRequested
+				tx.update(transferItems)
+					.set({ quantitySent: item.quantityRequested })
+					.where(eq(transferItems.id, item.id))
+					.run();
+			}
+
+			tx.update(transfers)
+				.set({
+					status: 'shipped',
+					shippedBy,
+					shippedAt: new Date().toISOString()
+				})
+				.where(eq(transfers.id, transferId))
+				.run();
+
+			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			return updated;
+		});
+	},
+
+	receive(transferId: string, receivedBy: string, data: ReceiveInput) {
+		return db.transaction((tx) => {
+			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
+
+			assertTransition(transfer.status, 'received');
+
+			const allItems = tx
+				.select()
+				.from(transferItems)
+				.where(eq(transferItems.transferId, transferId))
+				.all();
+
+			let isPartial = false;
+			const anomalyParts: string[] = [];
+
+			// Process each received item
+			for (const receivedItem of data.items) {
+				const transferItem = allItems.find((i) => i.id === receivedItem.transferItemId);
+				if (!transferItem) throw new Error('TRANSFER_ITEM_NOT_FOUND');
+
+				// Update the transfer item with received quantity
+				tx.update(transferItems)
+					.set({
+						quantityReceived: receivedItem.quantityReceived,
+						anomalyNotes: receivedItem.anomalyNotes ?? null
+					})
+					.where(eq(transferItems.id, receivedItem.transferItemId))
+					.run();
+
+				// Look up the source warehouse PUMP for this product
+				const [sourcePw] = tx
+					.select({ pump: productWarehouse.pump })
+					.from(productWarehouse)
+					.where(
+						and(
+							eq(productWarehouse.productId, transferItem.productId),
+							eq(productWarehouse.warehouseId, transfer.sourceWarehouseId)
+						)
+					)
+					.all();
+
+				const purchasePrice = sourcePw?.pump ?? 0;
+
+				// Increment destination stock
+				stockService.recordMovement({
+					productId: transferItem.productId,
+					warehouseId: transfer.destinationWarehouseId,
+					type: 'in',
+					quantity: receivedItem.quantityReceived,
+					reason: 'transfert',
+					userId: receivedBy,
+					reference: `TRF-${transferId}`,
+					purchasePrice
+				});
+
+				// Check for partial receipt
+				const quantitySent = transferItem.quantitySent ?? transferItem.quantityRequested;
+				if (receivedItem.quantityReceived < quantitySent) {
+					isPartial = true;
+					const diff = quantitySent - receivedItem.quantityReceived;
+					anomalyParts.push(
+						`Product ${transferItem.productId}: sent ${quantitySent}, received ${receivedItem.quantityReceived} (missing ${diff})${receivedItem.anomalyNotes ? ' — ' + receivedItem.anomalyNotes : ''}`
+					);
+				}
+			}
+
+			const now = new Date().toISOString();
+
+			if (isPartial) {
+				// Auto-transition: shipped → partially_received → disputed
+				const disputeReason = `Partial receipt: ${anomalyParts.join('; ')}`;
+				tx.update(transfers)
+					.set({
+						status: sql`'disputed'`,
+						receivedBy,
+						receivedAt: now,
+						disputeReason
+					})
+					.where(eq(transfers.id, transferId))
+					.run();
+			} else {
+				tx.update(transfers)
+					.set({
+						status: 'received',
+						receivedBy,
+						receivedAt: now
+					})
+					.where(eq(transfers.id, transferId))
+					.run();
+			}
+
+			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			return updated;
+		});
+	},
+
+	cancel(transferId: string, cancelledBy: string) {
+		return db.transaction((tx) => {
+			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
+
+			assertTransition(transfer.status, 'cancelled');
+
+			tx.update(transfers)
+				.set({
+					status: 'cancelled',
+					notes: transfer.notes
+						? `${transfer.notes}\nCancelled by ${cancelledBy}`
+						: `Cancelled by ${cancelledBy}`
+				})
+				.where(eq(transfers.id, transferId))
+				.run();
+
+			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			return updated;
+		});
+	},
+
+	resolveDispute(transferId: string, resolvedBy: string, data: ResolveDisputeInput) {
+		return db.transaction((tx) => {
+			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
+
+			assertTransition(transfer.status, 'resolved');
+
+			const now = new Date().toISOString();
+			const updatedNotes = transfer.notes
+				? `${transfer.notes}\nResolution: ${data.resolution}`
+				: `Resolution: ${data.resolution}`;
+
+			tx.update(transfers)
+				.set({
+					status: sql`'resolved'`,
+					disputeResolvedBy: resolvedBy,
+					disputeResolvedAt: now,
+					notes: updatedNotes
+				})
+				.where(eq(transfers.id, transferId))
+				.run();
+
+			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+			return updated;
+		});
+	}
+};
