@@ -179,6 +179,76 @@ describe('transferService', () => {
 		});
 	});
 
+	describe('createWithWarnings', () => {
+		it('should include warnings when source stock is insufficient', () => {
+			expect.assertions(4);
+			// Cleanup seeded stock so we control exact quantities
+			db.delete(movements).where(eq(movements.userId, TEST_USER_ID)).run();
+			db.delete(productWarehouse)
+				.where(eq(productWarehouse.warehouseId, TEST_SOURCE_WH_ID))
+				.run();
+
+			// Setup: put only 5 units in source warehouse
+			stockService.recordMovement({
+				productId: TEST_PRODUCT_A_ID,
+				warehouseId: TEST_SOURCE_WH_ID,
+				type: 'in',
+				quantity: 5,
+				reason: 'restock',
+				userId: TEST_USER_ID,
+				purchasePrice: 1000
+			});
+
+			const result = transferService.createWithWarnings({
+				sourceWarehouseId: TEST_SOURCE_WH_ID,
+				destinationWarehouseId: TEST_DEST_WH_ID,
+				requestedBy: TEST_USER_ID,
+				items: [{ productId: TEST_PRODUCT_A_ID, quantityRequested: 10 }]
+			});
+
+			expect(result.transfer).toBeDefined();
+			expect(result.transfer.status).toBe('pending');
+			expect(result.warnings).toHaveLength(1);
+			expect(result.warnings[0]).toContain('5');
+		});
+
+		it('should return no warnings when stock is sufficient', () => {
+			expect.assertions(2);
+			// seedTestData already puts 100 units of Product A in source warehouse
+
+			const result = transferService.createWithWarnings({
+				sourceWarehouseId: TEST_SOURCE_WH_ID,
+				destinationWarehouseId: TEST_DEST_WH_ID,
+				requestedBy: TEST_USER_ID,
+				items: [{ productId: TEST_PRODUCT_A_ID, quantityRequested: 10 }]
+			});
+
+			expect(result.transfer.status).toBe('pending');
+			expect(result.warnings).toHaveLength(0);
+		});
+
+		it('should still create the transfer even when stock is insufficient', () => {
+			expect.assertions(3);
+			// Cleanup seeded stock so we control exact quantities
+			db.delete(movements).where(eq(movements.userId, TEST_USER_ID)).run();
+			db.delete(productWarehouse)
+				.where(eq(productWarehouse.warehouseId, TEST_SOURCE_WH_ID))
+				.run();
+
+			// No stock at all for Product A in source warehouse
+			const result = transferService.createWithWarnings({
+				sourceWarehouseId: TEST_SOURCE_WH_ID,
+				destinationWarehouseId: TEST_DEST_WH_ID,
+				requestedBy: TEST_USER_ID,
+				items: [{ productId: TEST_PRODUCT_A_ID, quantityRequested: 10 }]
+			});
+
+			expect(result.transfer).toBeDefined();
+			expect(result.transfer.id).toBeDefined();
+			expect(result.warnings).toHaveLength(1);
+		});
+	});
+
 	describe('approve', () => {
 		it('should change status from pending to approved', () => {
 			const transfer = transferService.create({

@@ -105,7 +105,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	try {
-		const transfer = transferService.create({
+		const { transfer, warnings } = transferService.createWithWarnings({
 			sourceWarehouseId: parsed.data.sourceWarehouseId,
 			destinationWarehouseId: parsed.data.destinationWarehouseId,
 			requestedBy: user.id,
@@ -125,7 +125,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 		});
 
-		return json({ data: transfer }, { status: 201 });
+		return json({ data: transfer, warnings }, { status: 201 });
 	} catch (err) {
 		if (err instanceof Error) {
 			throw error(500, err.message);

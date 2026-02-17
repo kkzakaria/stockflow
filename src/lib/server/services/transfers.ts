@@ -82,6 +82,33 @@ function assertTransition(currentStatus: TransferStatus, targetStatus: TransferS
 // ============================================================================
 
 export const transferService = {
+	createWithWarnings(data: CreateTransferInput) {
+		const warnings: string[] = [];
+
+		for (const item of data.items) {
+			const [pw] = db
+				.select({ quantity: productWarehouse.quantity })
+				.from(productWarehouse)
+				.where(
+					and(
+						eq(productWarehouse.productId, item.productId),
+						eq(productWarehouse.warehouseId, data.sourceWarehouseId)
+					)
+				)
+				.all();
+
+			const available = pw?.quantity ?? 0;
+			if (available < item.quantityRequested) {
+				warnings.push(
+					`Stock insuffisant pour ${item.productId}: ${available} disponible, ${item.quantityRequested} demandé`
+				);
+			}
+		}
+
+		const transfer = this.create(data);
+		return { transfer, warnings };
+	},
+
 	create(data: CreateTransferInput) {
 		return db.transaction((tx) => {
 			const transferId = nanoid();
