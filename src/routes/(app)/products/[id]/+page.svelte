@@ -1,10 +1,14 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { PageHeader, Button, Badge, Card } from '$lib/components/ui';
 	import { formatXOF, formatDate } from '$lib/utils/format';
 
 	let { data } = $props();
+
+	let activeTab = $state<'overview' | 'config'>('overview');
+	let savingWarehouse = $state<string | null>(null);
+	let saveMessage = $state<{ warehouseId: string; type: 'success' | 'error'; text: string } | null>(null);
 
 	const typeBadge: Record<
 		string,
@@ -45,6 +49,31 @@
 	{/snippet}
 </PageHeader>
 
+<!-- Tabs -->
+<div class="mb-6 border-b border-gray-200">
+	<nav class="-mb-px flex gap-6">
+		<button
+			class="border-b-2 pb-3 text-sm font-medium {activeTab === 'overview'
+				? 'border-blue-500 text-blue-600'
+				: 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
+			onclick={() => (activeTab = 'overview')}
+		>
+			Apercu
+		</button>
+		{#if data.canEdit}
+			<button
+				class="border-b-2 pb-3 text-sm font-medium {activeTab === 'config'
+					? 'border-blue-500 text-blue-600'
+					: 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
+				onclick={() => (activeTab = 'config')}
+			>
+				Configuration
+			</button>
+		{/if}
+	</nav>
+</div>
+
+{#if activeTab === 'overview'}
 <!-- Summary cards -->
 <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
 	<Card>
@@ -256,3 +285,90 @@
 		</div>
 	{/if}
 </Card>
+{:else if activeTab === 'config'}
+<!-- Config tab: per-warehouse minStock thresholds -->
+<Card>
+	<h2 class="mb-4 text-lg font-semibold text-gray-900">Seuils de stock minimum par entrepot</h2>
+	{#if data.warehouseStock.length === 0}
+		<p class="text-sm text-gray-500">Aucun entrepot associe a ce produit.</p>
+	{:else}
+		<div class="divide-y divide-gray-200">
+			{#each data.warehouseStock as ws (ws.warehouseId)}
+				<form
+					class="flex items-center gap-4 py-3"
+					onsubmit={async (e) => {
+						e.preventDefault();
+						savingWarehouse = ws.warehouseId;
+						saveMessage = null;
+						try {
+							const formData = new FormData(e.currentTarget);
+							const minStock = Number(formData.get('minStock'));
+							const res = await fetch(
+								`/api/v1/products/${data.product.id}/warehouses/${ws.warehouseId}`,
+								{
+									method: 'PUT',
+									headers: { 'Content-Type': 'application/json' },
+									body: JSON.stringify({ minStock })
+								}
+							);
+							if (res.ok) {
+								saveMessage = {
+									warehouseId: ws.warehouseId,
+									type: 'success',
+									text: 'Enregistre'
+								};
+								await invalidateAll();
+							} else {
+								const err = (await res.json().catch(() => null)) as {
+									message?: string;
+								} | null;
+								saveMessage = {
+									warehouseId: ws.warehouseId,
+									type: 'error',
+									text: err?.message ?? 'Erreur lors de la sauvegarde'
+								};
+							}
+						} catch {
+							saveMessage = {
+								warehouseId: ws.warehouseId,
+								type: 'error',
+								text: 'Erreur reseau'
+							};
+						} finally {
+							savingWarehouse = null;
+						}
+					}}
+				>
+					<span class="min-w-[160px] text-sm font-medium text-gray-900">
+						{ws.warehouseName}
+					</span>
+					<input
+						type="number"
+						name="minStock"
+						min="0"
+						value={ws.minStock ?? 0}
+						class="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+					/>
+					<Button
+						type="submit"
+						variant="primary"
+						size="sm"
+						disabled={savingWarehouse === ws.warehouseId}
+					>
+						{savingWarehouse === ws.warehouseId ? 'Saving...' : 'Enregistrer'}
+					</Button>
+					{#if saveMessage?.warehouseId === ws.warehouseId}
+						<span
+							class="text-sm {saveMessage.type === 'success'
+								? 'text-green-600'
+								: 'text-red-600'}"
+						>
+							{saveMessage.text}
+						</span>
+					{/if}
+				</form>
+			{/each}
+		</div>
+	{/if}
+</Card>
+{/if}
