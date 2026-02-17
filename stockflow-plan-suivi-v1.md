@@ -24,12 +24,12 @@
 | Semaine              | Module                              | Progression | Statut |
 | -------------------- | ----------------------------------- | ----------- | ------ |
 | S1 (5-11 fév)        | Fondations                          | 35/41       | ✅     |
-| S2 (12-18 fév)       | Core Métier                         | 20/34       | 🟡     |
-| S3 (19-25 fév)       | Transferts, Inventaire & Résilience | 25/39       | 🟡     |
+| S2 (12-18 fév)       | Core Métier                         | 24/34       | 🟡     |
+| S3 (19-25 fév)       | Transferts, Inventaire & Résilience | 29/39       | 🟡     |
 | S4 (26 fév - 5 mars) | Dashboard, Polish & Déploiement     | 5/46        | ⬜     |
-| **Total V1**         |                                     | **85/160**  | 🔵     |
+| **Total V1**         |                                     | **93/160**  | 🔵     |
 
-> **Note :** 12 tâches supplémentaires sont partiellement réalisées (🟡), non comptées dans la progression ci-dessus.
+> **Note :** 7 tâches supplémentaires sont partiellement réalisées (🟡), non comptées dans la progression ci-dessus.
 
 ## Points de contrôle (Checkpoints)
 
@@ -37,13 +37,13 @@
 | ---------- | --------------------------- | --------------------------------------------------------------- | --------- |
 | Ven 7 fév  | **CP0** — Setup validé      | Projet tourne en local, auth fonctionne, `db:push` OK           | ✅        |
 | Ven 11 fév | **CP1** — Fondations        | CRUD users/entrepôts fonctionnels, layout responsive            | ✅        |
-| Ven 18 fév | **CP2** — Core métier       | Mouvements entrées/sorties OK, scan fonctionnel, PUMP calculé   | 🟡        |
-| Ven 25 fév | **CP3** — Workflows         | Transfert complet bout-en-bout, inventaire, alertes, résilience | 🟡        |
+| Ven 18 fév | **CP2** — Core métier       | Mouvements entrées/sorties OK, scan fonctionnel, PUMP calculé   | ✅        |
+| Ven 25 fév | **CP3** — Workflows         | Transfert complet bout-en-bout, inventaire, alertes, résilience | ✅        |
 | Mer 4 mars | **CP4** — Release Candidate | Tests passent, migration prod prête                             | ⬜        |
 | Jeu 5 mars | **CP5** — Go Live           | Déploiement production                                          | ⬜        |
 
-> **CP2 :** Backend mouvements/PUMP 100% fonctionnel. Scan composant existe mais pas encore intégré dans le formulaire mouvements.
-> **CP3 :** Transfert bout-en-bout OK (sauf ajustement stock sur résolution litige). Inventaire OK. Alertes in-app OK (emails manquants).
+> **CP2 :** Backend mouvements/PUMP 100% fonctionnel. Scan intégré dans le formulaire mouvements (PR #5). Audit log sur mouvements OK.
+> **CP3 :** Transfert bout-en-bout OK incluant ajustement stock sur résolution litige (PR #5). Inventaire OK. Alertes in-app OK (emails manquants). Tests offline queue OK (11 tests).
 
 ---
 
@@ -260,10 +260,10 @@
 | 2.1.1 | API : endpoints CRUD produits (`/api/v1/products`)                                  | ✅     | - [x]    |
 | 2.1.2 | API : endpoints CRUD catégories (arbre hiérarchique parent_id)                      | ✅     | - [x]    |
 | 2.1.3 | Schémas validation Zod (createProductSchema, updateProductWarehouseSchema)          | ✅     | - [x]    |
-| 2.1.4 | API : recherche/filtre produits (SKU, nom, catégorie, entrepôt)                     | 🟡     | - [ ]    |
+| 2.1.4 | API : recherche/filtre produits (SKU, nom, catégorie, entrepôt)                     | ✅     | - [x]    |
 | 2.1.5 | API : configuration stock minimum par produit/entrepôt (product_warehouse.minStock) | ✅     | - [x]    |
 
-> **2.1.4 :** Recherche par SKU/nom (`?search=`) et filtre catégorie (`?category=`) OK. **Manquant :** filtre explicite `?warehouseId=` (le scoping par rôle est automatique mais pas sélectionnable par l'utilisateur).
+> **2.1.4 :** Recherche par SKU/nom (`?search=`), filtre catégorie (`?category=`), et filtre entrepôt (`?warehouseId=`) tous implémentés (PR #5).
 
 ### Critères d'acceptation
 
@@ -285,14 +285,14 @@
 | ----- | ----------------------------------------------------------------------------------------- | ------ | -------- |
 | 2.2.1 | UI : page `/products` — liste tableau/cards avec recherche, filtres catégorie/entrepôt    | ✅     | - [x]    |
 | 2.2.2 | UI : page `/products/new` — formulaire création (SKU, nom, prix, catégorie, seuils)       | ✅     | - [x]    |
-| 2.2.3 | UI : page `/products/[id]` — fiche détail avec onglets (Infos, Stock, Mouvements, Config) | 🟡     | - [ ]    |
+| 2.2.3 | UI : page `/products/[id]` — fiche détail avec onglets (Infos, Stock, Mouvements, Config) | ✅     | - [x]    |
 | 2.2.4 | UI : page `/products/[id]/edit` — formulaire modification                                 | ✅     | - [x]    |
 | 2.2.5 | Composant `<ProductCard />` — card produit (SKU, nom, stock total, alerte)                | ⬜     | - [ ]    |
 | 2.2.6 | Composant `<StockByWarehouse />` — tableau stock par entrepôt avec indicateurs            | ⬜     | - [ ]    |
 | 2.2.7 | Composant `<ProductSearch />` — barre de recherche avec autocomplete                      | ⬜     | - [ ]    |
 | 2.2.8 | Composant `<CategoryTree />` — sélecteur de catégorie hiérarchique                        | ⬜     | - [ ]    |
 
-> **2.2.3 :** Page existe avec sections Infos, Stock par entrepôt, Mouvements récents. **Manquants :** navigation par onglets, onglet Config pour seuils par entrepôt.
+> **2.2.3 :** Page avec navigation par onglets (Aperçu + Configuration). Onglet Config permet de paramétrer le minStock par entrepôt via fetch PUT (PR #5).
 > **2.2.5-2.2.8 :** Fonctionnalités implémentées inline dans les pages, pas extraites en composants réutilisables. CategoryTree est un simple `<select>` plat.
 
 ### Critères d'acceptation
@@ -302,7 +302,7 @@
 - [x] Prix affichés en XOF avec séparateur de milliers (via `formatXOF()`)
 - [x] Liste paginée (20 produits/page), triable
 - [x] Responsive : tableau desktop → cards mobile
-- [ ] Onglet Config permet de paramétrer le seuil par entrepôt
+- [x] Onglet Config permet de paramétrer le seuil par entrepôt
 
 **User stories couvertes :** PROD-05, PROD-06
 
@@ -375,7 +375,7 @@
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- |
 | 2.4.1 | API : `POST /api/v1/movements` — création mouvement (utilise `stockService`)                                                       | ✅     | - [x]    |
 | 2.4.2 | API : `GET /api/v1/movements` — historique avec filtres (date, produit, entrepôt, type, utilisateur)                               | ✅     | - [x]    |
-| 2.4.3 | Audit log automatique pour chaque mouvement                                                                                        | ⬜     | - [ ]    |
+| 2.4.3 | Audit log automatique pour chaque mouvement                                                                                        | ✅     | - [x]    |
 | 2.4.4 | Post-mouvement : vérification seuil minimum → alerte si nécessaire                                                                 | ✅     | - [x]    |
 | 2.4.5 | UI : page `/movements` — historique global avec filtres                                                                            | ✅     | - [x]    |
 | 2.4.6 | UI : page `/movements/new` — formulaire rapide (entrepôt → scan/recherche → type → qté → motif → prix achat si entrée → référence) | ✅     | - [x]    |
@@ -383,7 +383,7 @@
 | 2.4.8 | Composant `<MovementTimeline />` — historique visuel d'un produit                                                                  | ⬜     | - [ ]    |
 | 2.4.9 | Composant `<ReasonSelect />` — sélecteur de motif (prédéfinis + libre)                                                             | ⬜     | - [ ]    |
 
-> **2.4.3 :** `auditService` existe mais n'est pas appelé dans le handler POST mouvements.
+> **2.4.3 :** `auditService.log()` intégré dans le POST mouvements et les 6 endpoints de changement de statut transfert (PR #5). Wrappé en try-catch non-bloquant.
 > **2.4.7-2.4.9 :** Fonctionnalités implémentées inline dans les pages, pas extraites en composants.
 
 ### Critères d'acceptation
@@ -408,7 +408,7 @@
 | #     | Tâche                                                                                  | Statut | Checkbox |
 | ----- | -------------------------------------------------------------------------------------- | ------ | -------- |
 | 2.5.1 | Composant `<BarcodeScanner />` — wrapper html5-qrcode avec UI                          | ✅     | - [x]    |
-| 2.5.2 | Intégration dans le formulaire mouvements (scan → recherche produit → pré-remplissage) | ⬜     | - [ ]    |
+| 2.5.2 | Intégration dans le formulaire mouvements (scan → recherche produit → pré-remplissage) | ✅     | - [x]    |
 | 2.5.3 | Gestion permissions caméra (demande explicite + fallback gracieux)                     | 🟡     | - [ ]    |
 | 2.5.4 | Mode scan continu (option pour scanner plusieurs produits)                             | ✅     | - [x]    |
 | 2.5.5 | Fallback saisie manuelle SKU                                                           | ⬜     | - [ ]    |
@@ -419,7 +419,7 @@
 
 - [x] Ouverture caméra arrière (`facingMode: 'environment'`)
 - [x] Scan reconnaît les codes-barres/QR et affiche la fiche produit
-- [ ] Scan → formulaire mouvement pré-rempli avec le produit
+- [x] Scan → formulaire mouvement pré-rempli avec le produit
 - [ ] Si scan échoue → champ de saisie manuelle SKU disponible
 - [x] Mode scan continu pour inventaire (scan plusieurs produits à la suite)
 - [ ] Fonctionne sur Chrome Android et Safari iOS
@@ -427,7 +427,7 @@
 
 **User stories couvertes :** SCAN-01, SCAN-02, SCAN-03, SCAN-04
 
-**🏁 CP2 — Mouvements entrées/sorties fonctionnels, PUMP calculé.** 🟡 Scan composant existe mais pas intégré dans les formulaires.
+**🏁 CP2 — Mouvements entrées/sorties fonctionnels, PUMP calculé, scan intégré.** ✅
 
 ---
 
@@ -445,20 +445,20 @@
 
 | #      | Tâche                                                                                                              | Statut | Checkbox |
 | ------ | ------------------------------------------------------------------------------------------------------------------ | ------ | -------- |
-| 3.1.1  | API : `POST /api/v1/transfers` — création demande (validation stock source suffisant)                              | 🟡     | - [ ]    |
+| 3.1.1  | API : `POST /api/v1/transfers` — création demande (validation stock source suffisant)                              | ✅     | - [x]    |
 | 3.1.2  | API : `POST /api/v1/transfers/[id]/approve` — approbation (admin/admin_manager)                                    | ✅     | - [x]    |
 | 3.1.3  | API : `POST /api/v1/transfers/[id]/reject` — rejet avec motif obligatoire                                          | ✅     | - [x]    |
 | 3.1.4  | API : `POST /api/v1/transfers/[id]/ship` — expédition (décrémente stock source via `stockService`)                 | ✅     | - [x]    |
 | 3.1.5  | API : `POST /api/v1/transfers/[id]/receive` — réception complète (incrémente stock destination)                    | ✅     | - [x]    |
 | 3.1.6  | API : `POST /api/v1/transfers/[id]/receive` — réception partielle (qté_reçue < qté_envoyée → `partially_received`) | 🟡     | - [ ]    |
 | 3.1.7  | API : notification litige auto → admin gestionnaire si réception partielle                                         | ✅     | - [x]    |
-| 3.1.8  | API : `POST /api/v1/transfers/[id]/resolve` — résolution litige (ajustement stock + commentaire)                   | 🟡     | - [ ]    |
+| 3.1.8  | API : `POST /api/v1/transfers/[id]/resolve` — résolution litige (ajustement stock + commentaire)                   | ✅     | - [x]    |
 | 3.1.9  | API : `POST /api/v1/transfers/[id]/cancel` — annulation (avant expédition uniquement)                              | ✅     | - [x]    |
 | 3.1.10 | Service `transfers.ts` — machine à états complète                                                                  | 🟡     | - [ ]    |
 
-> **3.1.1 :** Création OK mais pas de vérification stock source à la création — vérification faite uniquement à l'expédition (ship).
+> **3.1.1 :** Création avec `createWithWarnings()` — vérification soft du stock source à la création, retourne des warnings si insuffisant (PR #5). Vérification stricte à l'expédition.
 > **3.1.6 :** Réception partielle fonctionne mais `partially_received` n'est pas un statut persisté — transition directe `shipped → disputed`.
-> **3.1.8 :** Endpoint existe avec `resolution` obligatoire. **Manquant :** `adjustStock` est accepté mais c'est un no-op (TODO dans le code).
+> **3.1.8 :** Endpoint complet avec `resolution` + `adjustStock` fonctionnel (PR #5). Quand `adjustStock: true`, crée des mouvements `adjustment_in` (source) ou `adjustment_out` (destination) selon l'écart.
 > **3.1.10 :** Machine à états couvre 7 des 8 transitions. `partially_received` fusionné dans `disputed`.
 
 ### Machine à états du transfert
@@ -480,11 +480,11 @@
 ### Critères d'acceptation
 
 - [x] Statuts implémentés : `pending`, `approved`, `rejected`, `shipped`, `received`, `partially_received`, `cancelled`, `disputed`, `resolved`
-- [ ] La demande vérifie que le stock source est suffisant (vérifié à l'expédition seulement)
+- [x] La demande vérifie que le stock source est suffisant (soft check à la création avec warnings, strict à l'expédition)
 - [x] L'expédition débite le stock source (via `stockService`)
 - [x] La réception crédite le stock destination (via `stockService`, PUMP recalculé)
 - [x] Réception partielle → anomaly_notes obligatoire → auto `disputed`
-- [ ] Résolution de litige → ajustement stock + clôture (`adjustStock` est un TODO)
+- [x] Résolution de litige → ajustement stock + clôture
 - [x] Annulation possible uniquement avant expédition
 - [x] Chaque étape horodatée avec l'utilisateur
 - [x] Un transfert ne peut pas être modifié après approbation
@@ -499,7 +499,7 @@
 
 | #     | Tâche                                                                                                              | Statut | Checkbox |
 | ----- | ------------------------------------------------------------------------------------------------------------------ | ------ | -------- |
-| 3.2.1 | UI : page `/transfers` — liste avec filtres (statut, entrepôt source/destination, date) + vue Kanban optionnelle   | 🟡     | - [ ]    |
+| 3.2.1 | UI : page `/transfers` — liste avec filtres (statut, entrepôt source/destination, date) + vue Kanban optionnelle   | ✅     | - [x]    |
 | 3.2.2 | UI : page `/transfers/new` — formulaire (source + destination + ajout produits scan/recherche + quantités + notes) | ✅     | - [x]    |
 | 3.2.3 | UI : page `/transfers/[id]` — détail avec timeline visuelle + items + actions contextuelles                        | ✅     | - [x]    |
 | 3.2.4 | Composant `<TransferTimeline />` — visualisation des étapes (stepper)                                              | ⬜     | - [ ]    |
@@ -507,7 +507,7 @@
 | 3.2.6 | Composant `<TransferItemsTable />` — tableau produits (demandé / envoyé / reçu)                                    | ⬜     | - [ ]    |
 | 3.2.7 | Composant `<DisputeBanner />` — bandeau d'alerte si litige en cours                                                | ⬜     | - [ ]    |
 
-> **3.2.1 :** Filtres par onglets de statut et scoping entrepôt par rôle OK. **Manquants :** filtre par date, vue Kanban.
+> **3.2.1 :** Filtres par onglets de statut, scoping entrepôt par rôle, et filtre par date (Du/Au) OK (PR #5). **Manquant :** vue Kanban (nice-to-have).
 > **3.2.4-3.2.7 :** Toutes les fonctionnalités existent inline dans la page `/transfers/[id]` (timeline, boutons d'action conditionnels, tableau items, bandeau litige). Pas extraites en composants séparés.
 
 ### Critères d'acceptation
@@ -517,7 +517,7 @@
 - [x] Tableau items montre 3 colonnes : demandé / envoyé / reçu avec mise en évidence des écarts
 - [x] Bandeau litige visible sur les transferts en dispute
 - [x] Zone commentaires/anomalies accessible
-- [ ] Liste filtrable par statut, entrepôt, date (filtre date manquant)
+- [x] Liste filtrable par statut, entrepôt, date
 
 ---
 
@@ -618,7 +618,7 @@
 | 3.5.3 | Retry automatique à la reconnexion (`window.addEventListener('online', flush)`)           | ✅     | - [x]    |
 | 3.5.4 | Composant `<OfflineBanner />` — bandeau visuel offline + badge pending                    | ✅     | - [x]    |
 | 3.5.5 | Protection formulaires (sauvegarde état en cas de perte réseau)                           | ⬜     | - [ ]    |
-| 3.5.6 | Tests unitaires (enqueue/flush)                                                           | ⬜     | - [ ]    |
+| 3.5.6 | Tests unitaires (enqueue/flush)                                                           | ✅     | - [x]    |
 
 ### Opérations concernées
 
@@ -642,7 +642,7 @@
 
 **User stories couvertes :** NET-01, NET-02, NET-03, NET-04
 
-**🏁 CP3 — Transfert bout-en-bout OK, inventaire OK, alertes in-app OK, résilience implémentée.** 🟡 Manquent : emails, ajustement stock litige, tests offline.
+**🏁 CP3 — Transfert bout-en-bout complet (incluant ajustement stock litige), inventaire OK, alertes in-app OK, résilience implémentée et testée (11 tests).** ✅ Manquent : emails.
 
 ---
 
@@ -698,13 +698,13 @@
 
 | #     | Tâche                                                                                                                 | Statut | Checkbox |
 | ----- | --------------------------------------------------------------------------------------------------------------------- | ------ | -------- |
-| 4.2.1 | Service `auditService.log()` — logging automatique CUD (create, update, delete, movement, transfer, inventory, login) | ⬜     | - [ ]    |
+| 4.2.1 | Service `auditService.log()` — logging automatique CUD (create, update, delete, movement, transfer, inventory, login) | 🟡     | - [ ]    |
 | 4.2.2 | API : `GET /api/v1/logs` — liste paginée avec filtres (utilisateur, type action, entité, date range)                  | ⬜     | - [ ]    |
 | 4.2.3 | UI : page `/logs` — tableau paginé (Date, Utilisateur, Action, Entité, Détail)                                        | ⬜     | - [ ]    |
 | 4.2.4 | UI : détail d'un log — valeurs avant/après (JSON diff), métadonnées (IP, user agent)                                  | ⬜     | - [ ]    |
 | 4.2.5 | Export CSV des logs filtrés                                                                                           | ⬜     | - [ ]    |
 
-> **Note :** Le service `auditService` existe dans `src/lib/server/services/audit.ts` avec tests, mais n'est intégré dans aucun endpoint API. Les pages `/logs` et `/settings` existent comme coquilles vides (pas de `+page.server.ts`).
+> **Note :** `auditService.log()` intégré dans les endpoints mouvements (POST) et transferts (POST + 6 changements de statut) via PR #5. Non-bloquant (try-catch). **Manquants :** intégration dans CRUD users/warehouses/products, pages `/logs` et `/settings` (coquilles vides).
 
 ### Critères d'acceptation
 
@@ -792,7 +792,7 @@
 | Transferts    |   - [x] machine à états (17 tests)     | - [x] API workflow (4 tests)   | - [ ] flux complet + litige |
 | Alertes       |     - [x] trigger conditions           |        - [ ] API alerts        |              —              |
 | Validators    | - [x] 5/7 schémas Zod (42 tests)      |               —                |              —              |
-| Offline queue |        - [ ] enqueue/flush             |               —                |              —              |
+| Offline queue |    - [x] enqueue/flush (11 tests)      |               —                |              —              |
 
 ---
 
@@ -883,12 +883,12 @@
 | CRUD Produits + catégories + prix XOF               | PROD-01 à 07 | ✅        | Backend + frontend complets                               |
 | Mouvements entrées/sorties (transactions atomiques) | MOV-01 à 06  | ✅        | Transactions atomiques, alertes post-mouvement            |
 | Calcul PUMP à l'écriture                            | MOV-06       | ✅        | Calculé en SQL via onConflictDoUpdate                     |
-| Scan codes-barres (html5-qrcode)                    | SCAN-01 à 04 | 🟡        | Composant existe, pas intégré dans les formulaires        |
-| Résilience réseau (queue IndexedDB)                 | NET-01 à 04  | 🟡        | Queue + banner OK. Pas de tests, pas de protection forms  |
-| Workflow transferts complet (incluant litiges)      | TRF-01 à 10  | 🟡        | 8 statuts OK. adjustStock TODO sur résolution litige      |
+| Scan codes-barres (html5-qrcode)                    | SCAN-01 à 04 | ✅        | Composant intégré dans formulaire mouvements (PR #5)      |
+| Résilience réseau (queue IndexedDB)                 | NET-01 à 04  | 🟡        | Queue + banner + tests OK (11 tests). Pas de protection forms |
+| Workflow transferts complet (incluant litiges)      | TRF-01 à 10  | ✅        | 8 statuts + adjustStock + validation stock création (PR #5)   |
 | Module inventaire (sessions, écarts, validation)    | INV-01 à 05  | ✅        | Création, comptage, écarts, validation ajustement auto    |
 | Alertes in-app + email                              | ALT-01 à 04  | 🟡        | In-app OK avec dédoublonnage. Emails non implémentés      |
-| Logs et traçabilité (audit complet)                 | LOG-01 à 04  | ⬜        | Service existe avec tests mais non intégré dans les APIs  |
+| Logs et traçabilité (audit complet)                 | LOG-01 à 04  | 🟡        | Intégré dans mouvements + transferts (PR #5). Manque CRUD users/products/warehouses + UI logs |
 | Dashboard par rôle                                  | DASH-01 à 04 | ⬜        | Page coquille vide                                        |
 
 ## Critères techniques
@@ -919,3 +919,4 @@ _PR Semaine 1 : [#1](https://github.com/kkzakaria/stockflow/pull/1) — Fusionn�
 _PR Semaine 2 : [#2](https://github.com/kkzakaria/stockflow/pull/2) — Fusionné_
 _PR Semaine 3 : [#3](https://github.com/kkzakaria/stockflow/pull/3) — Fusionné_
 _PR Seed Data : [#4](https://github.com/kkzakaria/stockflow/pull/4) — Fusionné_
+_PR Semaines 2-3 restant : [#5](https://github.com/kkzakaria/stockflow/pull/5) — Fusionné_
