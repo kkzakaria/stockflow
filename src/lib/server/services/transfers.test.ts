@@ -10,7 +10,7 @@ import {
 	transferItems,
 	user
 } from '$lib/server/db/schema';
-import { eq, or, sql } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import { stockService } from './stock';
 import { transferService } from './transfers';
 
@@ -57,6 +57,7 @@ function cleanupTestData() {
 		db.delete(transfers).where(eq(transfers.id, t.id)).run();
 	}
 	db.delete(movements).where(eq(movements.userId, TEST_USER_ID)).run();
+	db.delete(movements).where(eq(movements.userId, TEST_APPROVER_ID)).run();
 	db.delete(movements).where(eq(movements.userId, TEST_SHIPPER_ID)).run();
 	db.delete(movements).where(eq(movements.userId, TEST_RECEIVER_ID)).run();
 	db.delete(productWarehouse)
@@ -417,6 +418,91 @@ describe('transferService', () => {
 			expect(resolved.notes).toContain(
 				'Accepted 7 units, 3 units lost in transit — supplier compensated'
 			);
+		});
+
+		it('should create adjustment movements when adjustStock is true', () => {
+			expect.assertions(8);
+
+			const transfer = transferService.create({
+				sourceWarehouseId: TEST_SOURCE_WH_ID,
+				destinationWarehouseId: TEST_DEST_WH_ID,
+				requestedBy: TEST_USER_ID,
+				items: [
+					{ productId: TEST_PRODUCT_A_ID, quantityRequested: 10 },
+					{ productId: TEST_PRODUCT_B_ID, quantityRequested: 5 }
+				]
+			});
+
+			transferService.approve(transfer.id, TEST_APPROVER_ID);
+			transferService.ship(transfer.id, TEST_SHIPPER_ID);
+
+			// Source stock after ship: A = 90, B = 45
+			const shipped = transferService.getById(transfer.id);
+			const itemA = shipped!.items.find((i) => i.productId === TEST_PRODUCT_A_ID)!;
+			const itemB = shipped!.items.find((i) => i.productId === TEST_PRODUCT_B_ID)!;
+
+			// Partial receive: A gets 7 (sent 10, missing 3), B gets 5 (full)
+			transferService.receive(transfer.id, TEST_RECEIVER_ID, {
+				items: [
+					{ transferItemId: itemA.id, quantityReceived: 7 },
+					{ transferItemId: itemB.id, quantityReceived: 5 }
+				]
+			});
+
+			// Verify disputed status
+			const disputed = transferService.getById(transfer.id);
+			expect(disputed!.status).toBe('disputed');
+
+			// Source stock: A = 90, B = 45 (unchanged since ship)
+			// Dest stock: A = 7, B = 5
+
+			const resolved = transferService.resolveDispute(transfer.id, TEST_APPROVER_ID, {
+				resolution: '3 units of Product A lost in transit',
+				adjustStock: true
+			});
+
+			expect(resolved.status).toBe('resolved');
+
+			// Source stock should have 3 units returned via adjustment_in (90 + 3 = 93)
+			const stockA = stockService.getStockByWarehouse(TEST_PRODUCT_A_ID);
+			const sourceA = stockA.find((s) => s.warehouseId === TEST_SOURCE_WH_ID);
+			expect(sourceA!.quantity).toBe(93);
+
+			// Product B had no discrepancy, source stock stays at 45
+			const stockB = stockService.getStockByWarehouse(TEST_PRODUCT_B_ID);
+			const sourceB = stockB.find((s) => s.warehouseId === TEST_SOURCE_WH_ID);
+			expect(sourceB!.quantity).toBe(45);
+
+			// Verify adjustment_in movement was created for product A
+			const adjMovements = db
+				.select()
+				.from(movements)
+				.where(
+					and(
+						eq(movements.type, 'adjustment_in'),
+						eq(movements.reason, 'dispute_resolution'),
+						eq(movements.warehouseId, TEST_SOURCE_WH_ID),
+						eq(movements.productId, TEST_PRODUCT_A_ID)
+					)
+				)
+				.all();
+			expect(adjMovements).toHaveLength(1);
+			expect(adjMovements[0].quantity).toBe(3);
+			expect(adjMovements[0].reference).toBe(`transfer:${transfer.id}`);
+
+			// No adjustment movement should exist for product B (no discrepancy)
+			const adjMovementsB = db
+				.select()
+				.from(movements)
+				.where(
+					and(
+						eq(movements.type, 'adjustment_in'),
+						eq(movements.reason, 'dispute_resolution'),
+						eq(movements.productId, TEST_PRODUCT_B_ID)
+					)
+				)
+				.all();
+			expect(adjMovementsB).toHaveLength(0);
 		});
 	});
 

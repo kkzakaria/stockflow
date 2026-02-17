@@ -453,10 +453,8 @@ export const transferService = {
 		});
 	},
 
-	// TODO: data.adjustStock is accepted but not yet implemented. When true, it should
-	// create stock adjustment movements to reconcile sent vs received quantities.
 	resolveDispute(transferId: string, resolvedBy: string, data: ResolveDisputeInput) {
-		return db.transaction((tx) => {
+		const result = db.transaction((tx) => {
 			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
 			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
 
@@ -478,7 +476,46 @@ export const transferService = {
 				.run();
 
 			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+
+			if (data.adjustStock) {
+				const items = tx
+					.select()
+					.from(transferItems)
+					.where(eq(transferItems.transferId, transferId))
+					.all();
+
+				for (const item of items) {
+					const quantitySent = item.quantitySent ?? item.quantityRequested;
+					const quantityReceived = item.quantityReceived ?? 0;
+					const discrepancy = quantitySent - quantityReceived;
+
+					if (discrepancy > 0) {
+						stockService.recordMovement({
+							productId: item.productId,
+							warehouseId: transfer.sourceWarehouseId,
+							type: 'adjustment_in',
+							quantity: discrepancy,
+							reason: 'dispute_resolution',
+							userId: resolvedBy,
+							reference: `transfer:${transferId}`
+						});
+					} else if (discrepancy < 0) {
+						stockService.recordMovement({
+							productId: item.productId,
+							warehouseId: transfer.destinationWarehouseId,
+							type: 'adjustment_out',
+							quantity: Math.abs(discrepancy),
+							reason: 'dispute_resolution',
+							userId: resolvedBy,
+							reference: `transfer:${transferId}`
+						});
+					}
+				}
+			}
+
 			return updated;
 		});
+
+		return result;
 	}
 };
