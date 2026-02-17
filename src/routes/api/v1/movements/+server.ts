@@ -7,6 +7,7 @@ import { canWrite, type Role } from '$lib/server/auth/rbac';
 import { createMovementSchema, MOVEMENT_TYPES } from '$lib/validators/movement';
 import { stockService } from '$lib/server/services/stock';
 import { alertService } from '$lib/server/services/alerts';
+import { auditService } from '$lib/server/services/audit';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
@@ -111,6 +112,25 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			...parsed.data,
 			userId: user.id
 		});
+
+		// Audit log — non-blocking: audit failure must not abort successful movement
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'movement',
+				entityType: 'movement',
+				entityId: movement.id,
+				newValues: {
+					type: parsed.data.type,
+					quantity: parsed.data.quantity,
+					productId: parsed.data.productId,
+					warehouseId: parsed.data.warehouseId,
+					reason: parsed.data.reason
+				}
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log movement:', auditErr);
+		}
 
 		// Check if stock dropped below minimum and trigger alert
 		const stockCheck = stockService.checkMinStock(parsed.data.productId, parsed.data.warehouseId);

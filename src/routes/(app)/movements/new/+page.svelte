@@ -3,10 +3,28 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { PageHeader, Button, Card, Input, Select } from '$lib/components/ui';
+	import BarcodeScanner from '$lib/components/scan/BarcodeScanner.svelte';
 	import { MOVEMENT_REASONS } from '$lib/validators/movement';
 
 	let { data, form } = $props();
 	let loading = $state(false);
+	let showScanner = $state(false);
+	let scanError = $state('');
+	let scannedProductId = $state('');
+
+	function handleScan(code: string) {
+		scanError = '';
+		const match = data.products.find(
+			(p) => p.sku?.toLowerCase() === code.trim().toLowerCase()
+		);
+		if (match) {
+			scannedProductId = match.id;
+			showScanner = false;
+			scanError = '';
+		} else {
+			scanError = `Aucun produit trouve pour le code "${code}"`;
+		}
+	}
 
 	// Cast form to avoid discriminated union narrowing issues across fail() return shapes
 	const formData = $derived(
@@ -18,6 +36,10 @@
 			  }
 			| null
 			| undefined
+	);
+
+	const productId = $derived(
+		scannedProductId || (formData?.data?.productId as string) || data.preselected.productId || ''
 	);
 
 	let selectedType = $state('in');
@@ -81,18 +103,51 @@
 				{/each}
 			</Select>
 
-			<Select
-				name="productId"
-				label="Produit *"
-				value={formData?.data?.productId ?? data.preselected.productId}
-				error={formData?.errors?.productId?.[0]}
-				required
-			>
-				<option value="">-- Selectionner un produit --</option>
-				{#each data.products as product (product.id)}
-					<option value={product.id}>{product.sku} - {product.name}</option>
-				{/each}
-			</Select>
+			<div>
+				<div class="flex items-end gap-2">
+					<div class="flex-1">
+						<Select
+							name="productId"
+							label="Produit *"
+							value={productId}
+							onchange={(e) => {
+								scannedProductId = e.currentTarget.value;
+							}}
+							error={formData?.errors?.productId?.[0]}
+							required
+						>
+							<option value="">-- Selectionner un produit --</option>
+							{#each data.products as product (product.id)}
+								<option value={product.id}>{product.sku} - {product.name}</option>
+							{/each}
+						</Select>
+					</div>
+					<button
+						type="button"
+						onclick={() => {
+							showScanner = !showScanner;
+							scanError = '';
+						}}
+						class="mb-0.5 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+						title="Scanner un code-barres"
+					>
+						{showScanner ? 'Fermer' : 'Scanner'}
+					</button>
+				</div>
+				{#if showScanner}
+					<div class="mt-2">
+						<BarcodeScanner
+							onscan={handleScan}
+							onerror={(msg) => {
+								scanError = msg;
+							}}
+						/>
+					</div>
+				{/if}
+				{#if scanError}
+					<p class="mt-1 text-sm text-red-600" role="alert">{scanError}</p>
+				{/if}
+			</div>
 
 			<fieldset class="space-y-1">
 				<legend class="block text-sm font-medium text-gray-700">Type de mouvement *</legend>

@@ -6,6 +6,7 @@ import { requireAuth, getUserWarehouseIds, requireWarehouseAccess } from '$lib/s
 import { canManage, type Role } from '$lib/server/auth/rbac';
 import { createTransferSchema } from '$lib/validators/transfer';
 import { transferService } from '$lib/server/services/transfers';
+import { auditService } from '$lib/server/services/audit';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
@@ -104,7 +105,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	try {
-		const transfer = transferService.create({
+		const { transfer, warnings } = transferService.createWithWarnings({
 			sourceWarehouseId: parsed.data.sourceWarehouseId,
 			destinationWarehouseId: parsed.data.destinationWarehouseId,
 			requestedBy: user.id,
@@ -112,7 +113,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			notes: parsed.data.notes
 		});
 
-		return json({ data: transfer }, { status: 201 });
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'transfer',
+				entityType: 'transfer',
+				entityId: transfer.id,
+				newValues: {
+					sourceWarehouseId: parsed.data.sourceWarehouseId,
+					destinationWarehouseId: parsed.data.destinationWarehouseId,
+					itemCount: parsed.data.items.length
+				}
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log transfer creation:', auditErr);
+		}
+
+		return json({ data: transfer, warnings }, { status: 201 });
 	} catch (err) {
 		if (err instanceof Error) {
 			throw error(500, err.message);

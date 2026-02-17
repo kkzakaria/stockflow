@@ -82,6 +82,33 @@ function assertTransition(currentStatus: TransferStatus, targetStatus: TransferS
 // ============================================================================
 
 export const transferService = {
+	createWithWarnings(data: CreateTransferInput) {
+		const warnings: string[] = [];
+
+		for (const item of data.items) {
+			const [pw] = db
+				.select({ quantity: productWarehouse.quantity })
+				.from(productWarehouse)
+				.where(
+					and(
+						eq(productWarehouse.productId, item.productId),
+						eq(productWarehouse.warehouseId, data.sourceWarehouseId)
+					)
+				)
+				.all();
+
+			const available = pw?.quantity ?? 0;
+			if (available < item.quantityRequested) {
+				warnings.push(
+					`Stock insuffisant pour ${item.productId}: ${available} disponible, ${item.quantityRequested} demandé`
+				);
+			}
+		}
+
+		const transfer = this.create(data);
+		return { transfer, warnings };
+	},
+
 	create(data: CreateTransferInput) {
 		return db.transaction((tx) => {
 			const transferId = nanoid();
@@ -453,10 +480,8 @@ export const transferService = {
 		});
 	},
 
-	// TODO: data.adjustStock is accepted but not yet implemented. When true, it should
-	// create stock adjustment movements to reconcile sent vs received quantities.
 	resolveDispute(transferId: string, resolvedBy: string, data: ResolveDisputeInput) {
-		return db.transaction((tx) => {
+		const result = db.transaction((tx) => {
 			const [transfer] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
 			if (!transfer) throw new Error('TRANSFER_NOT_FOUND');
 
@@ -478,7 +503,49 @@ export const transferService = {
 				.run();
 
 			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
+
+			// Stock adjustments use stockService.recordMovement which opens its own db.transaction().
+			// With better-sqlite3, nested transactions use savepoints — if any adjustment fails,
+			// the outer transaction rolls back all savepoints, ensuring full atomicity.
+			if (data.adjustStock) {
+				const items = tx
+					.select()
+					.from(transferItems)
+					.where(eq(transferItems.transferId, transferId))
+					.all();
+
+				for (const item of items) {
+					const quantitySent = item.quantitySent ?? item.quantityRequested;
+					const quantityReceived = item.quantityReceived ?? 0;
+					const discrepancy = quantitySent - quantityReceived;
+
+					if (discrepancy > 0) {
+						stockService.recordMovement({
+							productId: item.productId,
+							warehouseId: transfer.sourceWarehouseId,
+							type: 'adjustment_in',
+							quantity: discrepancy,
+							reason: 'dispute_resolution',
+							userId: resolvedBy,
+							reference: `transfer:${transferId}`
+						});
+					} else if (discrepancy < 0) {
+						stockService.recordMovement({
+							productId: item.productId,
+							warehouseId: transfer.destinationWarehouseId,
+							type: 'adjustment_out',
+							quantity: Math.abs(discrepancy),
+							reason: 'dispute_resolution',
+							userId: resolvedBy,
+							reference: `transfer:${transferId}`
+						});
+					}
+				}
+			}
+
 			return updated;
 		});
+
+		return result;
 	}
 };

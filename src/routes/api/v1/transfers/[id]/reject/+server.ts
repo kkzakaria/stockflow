@@ -3,6 +3,7 @@ import { requireAuth } from '$lib/server/auth/guards';
 import { canApprove, type Role } from '$lib/server/auth/rbac';
 import { rejectTransferSchema } from '$lib/validators/transfer';
 import { transferService } from '$lib/server/services/transfers';
+import { auditService } from '$lib/server/services/audit';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
@@ -22,8 +23,23 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		error(400, { message: parsed.error.issues.map((i) => i.message).join(', ') });
 	}
 
+	const transfer = transferService.getById(params.id);
+	if (!transfer) error(404, 'Transfer not found');
+
 	try {
 		const result = transferService.reject(params.id, user.id, parsed.data.reason);
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'transfer',
+				entityType: 'transfer',
+				entityId: params.id,
+				oldValues: { status: transfer.status },
+				newValues: { status: 'rejected' }
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log transfer rejection:', auditErr);
+		}
 		return json({ data: result });
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';

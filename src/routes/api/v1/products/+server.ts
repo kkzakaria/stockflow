@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { eq, and, desc, sql, type SQL } from 'drizzle-orm';
+import { eq, and, desc, inArray, sql, type SQL } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { products, categories, productWarehouse } from '$lib/server/db/schema';
 import { requireAuth, getUserWarehouseIds } from '$lib/server/auth/guards';
@@ -13,6 +13,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	const search = url.searchParams.get('search');
 	const categoryId = url.searchParams.get('category');
+	const warehouseId = url.searchParams.get('warehouseId');
 	const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
 	const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 20));
 	const offset = (page - 1) * limit;
@@ -27,6 +28,20 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 
 	if (categoryId) {
 		conditions.push(eq(products.categoryId, categoryId));
+	}
+
+	// Filter by warehouse: only return products that have stock in the given warehouse
+	if (warehouseId) {
+		const warehouseProducts = await db
+			.select({ productId: productWarehouse.productId })
+			.from(productWarehouse)
+			.where(eq(productWarehouse.warehouseId, warehouseId));
+
+		const warehouseProductIds = warehouseProducts.map((p) => p.productId);
+		if (warehouseProductIds.length === 0) {
+			return json({ data: [], pagination: { page, limit, total: 0 } });
+		}
+		conditions.push(inArray(products.id, warehouseProductIds));
 	}
 
 	const whereClause = and(...conditions);

@@ -33,9 +33,29 @@
 		return statusBadge[status] ?? { label: status, variant: 'default' as BadgeVariant };
 	}
 
-	function filterByStatus(status: string) {
+	const activeStatus = $derived(data.status ?? '');
+	const dateFrom = $derived(data.dateFrom ?? '');
+	const dateTo = $derived(data.dateTo ?? '');
+
+	function buildParams(overrides: { status?: string; dateFrom?: string; dateTo?: string } = {}) {
 		const params = new URLSearchParams();
-		if (status) params.set('status', status);
+		const s = overrides.status ?? activeStatus;
+		const from = overrides.dateFrom ?? dateFrom;
+		const to = overrides.dateTo ?? dateTo;
+		if (s) params.set('status', s);
+		if (from) params.set('dateFrom', from);
+		if (to) params.set('dateTo', to);
+		return params;
+	}
+
+	function filterByStatus(status: string) {
+		const params = buildParams({ status });
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		goto(`/transfers${params.toString() ? '?' + params.toString() : ''}`);
+	}
+
+	function filterByDate(from: string, to: string) {
+		const params = buildParams({ dateFrom: from, dateTo: to });
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		goto(`/transfers${params.toString() ? '?' + params.toString() : ''}`);
 	}
@@ -55,7 +75,7 @@
 </PageHeader>
 
 <!-- Status filter tabs -->
-<div class="mb-6 flex flex-wrap gap-2">
+<div class="mb-4 flex flex-wrap gap-2">
 	{#each statusTabs as tab (tab.value)}
 		<button
 			type="button"
@@ -68,6 +88,43 @@
 			{tab.label}
 		</button>
 	{/each}
+</div>
+
+<!-- Date filter -->
+<div class="mb-6 flex flex-wrap items-center gap-3">
+	<label class="flex items-center gap-1.5 text-sm text-gray-600">
+		Du
+		<input
+			type="date"
+			class="rounded-md border border-gray-300 px-2 py-1 text-sm"
+			value={dateFrom}
+			onchange={(e) => {
+				filterByDate(e.currentTarget.value, dateTo);
+			}}
+		/>
+	</label>
+	<label class="flex items-center gap-1.5 text-sm text-gray-600">
+		Au
+		<input
+			type="date"
+			class="rounded-md border border-gray-300 px-2 py-1 text-sm"
+			value={dateTo}
+			onchange={(e) => {
+				filterByDate(dateFrom, e.currentTarget.value);
+			}}
+		/>
+	</label>
+	{#if dateFrom || dateTo}
+		<button
+			type="button"
+			class="text-sm text-blue-600 hover:text-blue-800"
+			onclick={() => {
+				filterByDate('', '');
+			}}
+		>
+			Effacer dates
+		</button>
+	{/if}
 </div>
 
 {#if data.transfers.length === 0}
@@ -188,8 +245,7 @@
 					<Button
 						variant="secondary"
 						onclick={() => {
-							const params = new URLSearchParams();
-							if (data.status) params.set('status', data.status);
+							const params = buildParams();
 							params.set('page', String(data.pagination.page - 1));
 							// eslint-disable-next-line svelte/no-navigation-without-resolve
 							goto(`/transfers?${params.toString()}`);
@@ -200,8 +256,7 @@
 					<Button
 						variant="secondary"
 						onclick={() => {
-							const params = new URLSearchParams();
-							if (data.status) params.set('status', data.status);
+							const params = buildParams();
 							params.set('page', String(data.pagination.page + 1));
 							// eslint-disable-next-line svelte/no-navigation-without-resolve
 							goto(`/transfers?${params.toString()}`);

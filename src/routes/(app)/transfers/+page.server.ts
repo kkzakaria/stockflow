@@ -1,4 +1,4 @@
-import { eq, and, or, desc, sql, type SQL } from 'drizzle-orm';
+import { eq, and, or, desc, gte, lte, sql, type SQL } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { transfers, transferItems, warehouses } from '$lib/server/db/schema';
 import { requireAuth, getUserWarehouseIds } from '$lib/server/auth/guards';
@@ -27,6 +27,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const status = (VALID_STATUSES as readonly string[]).includes(statusParam)
 		? (statusParam as TransferStatus)
 		: undefined;
+	const dateFrom = url.searchParams.get('dateFrom') ?? '';
+	const dateTo = url.searchParams.get('dateTo') ?? '';
 	const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
 	const limit = 20;
 	const offset = (page - 1) * limit;
@@ -40,6 +42,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			transfers: [],
 			pagination: { page, limit, total: 0 },
 			status: statusParam,
+			dateFrom,
+			dateTo,
 			warehouses: [],
 			canCreate: false
 		};
@@ -65,6 +69,13 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		conditions.push(
 			eq(transfers.status, status as (typeof transfers.status.enumValues)[number])
 		);
+	}
+
+	if (dateFrom) {
+		conditions.push(gte(transfers.requestedAt, dateFrom));
+	}
+	if (dateTo) {
+		conditions.push(lte(transfers.requestedAt, dateTo + 'T23:59:59'));
 	}
 
 	const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -118,6 +129,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		transfers: enrichedTransfers,
 		pagination: { page, limit, total },
 		status: statusParam,
+		dateFrom,
+		dateTo,
 		warehouses: warehouseList,
 		canCreate: canManage(role)
 	};

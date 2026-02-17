@@ -2,6 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import { requireAuth, requireWarehouseAccess } from '$lib/server/auth/guards';
 import { canManage, type Role } from '$lib/server/auth/rbac';
 import { transferService } from '$lib/server/services/transfers';
+import { auditService } from '$lib/server/services/audit';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params, locals }) => {
@@ -17,6 +18,18 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
 	try {
 		const result = transferService.ship(params.id, user.id);
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'transfer',
+				entityType: 'transfer',
+				entityId: params.id,
+				oldValues: { status: transfer.status },
+				newValues: { status: 'shipped' }
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log transfer shipment:', auditErr);
+		}
 		return json({ data: result });
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';
