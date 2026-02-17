@@ -15,7 +15,7 @@
 	function handleScan(code: string) {
 		scanError = '';
 		const match = data.products.find(
-			(p) => p.sku.toLowerCase() === code.trim().toLowerCase()
+			(p) => p.sku?.toLowerCase() === code.trim().toLowerCase()
 		);
 		if (match) {
 			scannedProductId = match.id;

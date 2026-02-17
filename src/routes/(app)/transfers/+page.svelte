@@ -33,9 +33,9 @@
 		return statusBadge[status] ?? { label: status, variant: 'default' as BadgeVariant };
 	}
 
-	let activeStatus = $derived(data.status ?? '');
-	let dateFrom = $derived(data.dateFrom ?? '');
-	let dateTo = $derived(data.dateTo ?? '');
+	const activeStatus = $derived(data.status ?? '');
+	const dateFrom = $derived(data.dateFrom ?? '');
+	const dateTo = $derived(data.dateTo ?? '');
 
 	function buildParams(overrides: { status?: string; dateFrom?: string; dateTo?: string } = {}) {
 		const params = new URLSearchParams();

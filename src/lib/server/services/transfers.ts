@@ -504,6 +504,9 @@ export const transferService = {
 
 			const [updated] = tx.select().from(transfers).where(eq(transfers.id, transferId)).all();
 
+			// Stock adjustments use stockService.recordMovement which opens its own db.transaction().
+			// With better-sqlite3, nested transactions use savepoints — if any adjustment fails,
+			// the outer transaction rolls back all savepoints, ensuring full atomicity.
 			if (data.adjustStock) {
 				const items = tx
 					.select()

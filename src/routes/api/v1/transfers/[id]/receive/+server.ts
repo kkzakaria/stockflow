@@ -31,14 +31,18 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	try {
 		const result = transferService.receive(params.id, user.id, parsed.data);
-		auditService.log({
-			userId: user.id,
-			action: 'transfer',
-			entityType: 'transfer',
-			entityId: params.id,
-			oldValues: { status: 'shipped' },
-			newValues: { status: result.status }
-		});
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'transfer',
+				entityType: 'transfer',
+				entityId: params.id,
+				oldValues: { status: transfer.status },
+				newValues: { status: result.status }
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log transfer reception:', auditErr);
+		}
 		return json({ data: result });
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';

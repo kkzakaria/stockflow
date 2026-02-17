@@ -15,14 +15,18 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
 	try {
 		const result = transferService.cancel(params.id, user.id);
-		auditService.log({
-			userId: user.id,
-			action: 'transfer',
-			entityType: 'transfer',
-			entityId: params.id,
-			oldValues: { status: transfer.status },
-			newValues: { status: 'cancelled' }
-		});
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'transfer',
+				entityType: 'transfer',
+				entityId: params.id,
+				oldValues: { status: transfer.status },
+				newValues: { status: 'cancelled' }
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log transfer cancellation:', auditErr);
+		}
 		return json({ data: result });
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';

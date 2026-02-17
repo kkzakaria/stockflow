@@ -10,16 +10,23 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 	const role = user.role as Role;
 	if (!canApprove(role)) error(403, 'Acc\u00e8s non autoris\u00e9');
 
+	const transfer = transferService.getById(params.id);
+	if (!transfer) error(404, 'Transfer not found');
+
 	try {
 		const result = transferService.approve(params.id, user.id);
-		auditService.log({
-			userId: user.id,
-			action: 'transfer',
-			entityType: 'transfer',
-			entityId: params.id,
-			oldValues: { status: 'pending' },
-			newValues: { status: 'approved' }
-		});
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'transfer',
+				entityType: 'transfer',
+				entityId: params.id,
+				oldValues: { status: transfer.status },
+				newValues: { status: 'approved' }
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log transfer approval:', auditErr);
+		}
 		return json({ data: result });
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';

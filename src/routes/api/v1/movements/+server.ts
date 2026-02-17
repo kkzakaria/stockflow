@@ -113,19 +113,24 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			userId: user.id
 		});
 
-		auditService.log({
-			userId: user.id,
-			action: 'movement',
-			entityType: 'movement',
-			entityId: movement.id,
-			newValues: {
-				type: parsed.data.type,
-				quantity: parsed.data.quantity,
-				productId: parsed.data.productId,
-				warehouseId: parsed.data.warehouseId,
-				reason: parsed.data.reason
-			}
-		});
+		// Audit log — non-blocking: audit failure must not abort successful movement
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'movement',
+				entityType: 'movement',
+				entityId: movement.id,
+				newValues: {
+					type: parsed.data.type,
+					quantity: parsed.data.quantity,
+					productId: parsed.data.productId,
+					warehouseId: parsed.data.warehouseId,
+					reason: parsed.data.reason
+				}
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log movement:', auditErr);
+		}
 
 		// Check if stock dropped below minimum and trigger alert
 		const stockCheck = stockService.checkMinStock(parsed.data.productId, parsed.data.warehouseId);

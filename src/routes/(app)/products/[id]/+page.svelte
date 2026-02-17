@@ -328,7 +328,8 @@
 									text: err?.message ?? 'Erreur lors de la sauvegarde'
 								};
 							}
-						} catch {
+						} catch (err) {
+							console.error('[config] Failed to save minStock:', err);
 							saveMessage = {
 								warehouseId: ws.warehouseId,
 								type: 'error',
@@ -355,7 +356,7 @@
 						size="sm"
 						disabled={savingWarehouse === ws.warehouseId}
 					>
-						{savingWarehouse === ws.warehouseId ? 'Saving...' : 'Enregistrer'}
+						{savingWarehouse === ws.warehouseId ? 'Sauvegarde...' : 'Enregistrer'}
 					</Button>
 					{#if saveMessage?.warehouseId === ws.warehouseId}
 						<span

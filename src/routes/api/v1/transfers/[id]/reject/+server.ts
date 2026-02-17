@@ -23,16 +23,23 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		error(400, { message: parsed.error.issues.map((i) => i.message).join(', ') });
 	}
 
+	const transfer = transferService.getById(params.id);
+	if (!transfer) error(404, 'Transfer not found');
+
 	try {
 		const result = transferService.reject(params.id, user.id, parsed.data.reason);
-		auditService.log({
-			userId: user.id,
-			action: 'transfer',
-			entityType: 'transfer',
-			entityId: params.id,
-			oldValues: { status: 'pending' },
-			newValues: { status: 'rejected' }
-		});
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'transfer',
+				entityType: 'transfer',
+				entityId: params.id,
+				oldValues: { status: transfer.status },
+				newValues: { status: 'rejected' }
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log transfer rejection:', auditErr);
+		}
 		return json({ data: result });
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';

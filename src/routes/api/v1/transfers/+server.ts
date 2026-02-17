@@ -113,17 +113,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			notes: parsed.data.notes
 		});
 
-		auditService.log({
-			userId: user.id,
-			action: 'transfer',
-			entityType: 'transfer',
-			entityId: transfer.id,
-			newValues: {
-				sourceWarehouseId: parsed.data.sourceWarehouseId,
-				destinationWarehouseId: parsed.data.destinationWarehouseId,
-				itemCount: parsed.data.items.length
-			}
-		});
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'transfer',
+				entityType: 'transfer',
+				entityId: transfer.id,
+				newValues: {
+					sourceWarehouseId: parsed.data.sourceWarehouseId,
+					destinationWarehouseId: parsed.data.destinationWarehouseId,
+					itemCount: parsed.data.items.length
+				}
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log transfer creation:', auditErr);
+		}
 
 		return json({ data: transfer, warnings }, { status: 201 });
 	} catch (err) {

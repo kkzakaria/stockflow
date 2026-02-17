@@ -23,16 +23,23 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		error(400, { message: parsed.error.issues.map((i) => i.message).join(', ') });
 	}
 
+	const transfer = transferService.getById(params.id);
+	if (!transfer) error(404, 'Transfer not found');
+
 	try {
 		const result = transferService.resolveDispute(params.id, user.id, parsed.data);
-		auditService.log({
-			userId: user.id,
-			action: 'transfer',
-			entityType: 'transfer',
-			entityId: params.id,
-			oldValues: { status: 'disputed' },
-			newValues: { status: 'resolved' }
-		});
+		try {
+			auditService.log({
+				userId: user.id,
+				action: 'transfer',
+				entityType: 'transfer',
+				entityId: params.id,
+				oldValues: { status: transfer.status },
+				newValues: { status: 'resolved' }
+			});
+		} catch (auditErr) {
+			console.error('[audit] Failed to log dispute resolution:', auditErr);
+		}
 		return json({ data: result });
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';
