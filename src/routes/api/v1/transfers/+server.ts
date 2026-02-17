@@ -6,6 +6,7 @@ import { requireAuth, getUserWarehouseIds, requireWarehouseAccess } from '$lib/s
 import { canManage, type Role } from '$lib/server/auth/rbac';
 import { createTransferSchema } from '$lib/validators/transfer';
 import { transferService } from '$lib/server/services/transfers';
+import { auditService } from '$lib/server/services/audit';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, url }) => {
@@ -110,6 +111,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			requestedBy: user.id,
 			items: parsed.data.items,
 			notes: parsed.data.notes
+		});
+
+		auditService.log({
+			userId: user.id,
+			action: 'transfer',
+			entityType: 'transfer',
+			entityId: transfer.id,
+			newValues: {
+				sourceWarehouseId: parsed.data.sourceWarehouseId,
+				destinationWarehouseId: parsed.data.destinationWarehouseId,
+				itemCount: parsed.data.items.length
+			}
 		});
 
 		return json({ data: transfer }, { status: 201 });

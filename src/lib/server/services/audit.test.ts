@@ -36,6 +36,7 @@ describe('auditService', () => {
 
 	describe('log', () => {
 		it('creates an audit log entry', () => {
+			expect.assertions(8);
 			auditService.log({
 				userId: TEST_USER_ID,
 				action: 'create',
@@ -69,6 +70,7 @@ describe('auditService', () => {
 		});
 
 		it('stores both old and new values for updates', () => {
+			expect.assertions(4);
 			auditService.log({
 				userId: TEST_USER_ID,
 				action: 'update',
@@ -100,6 +102,7 @@ describe('auditService', () => {
 		});
 
 		it('stores IP address when provided', () => {
+			expect.assertions(2);
 			auditService.log({
 				userId: TEST_USER_ID,
 				action: 'login',
@@ -126,6 +129,7 @@ describe('auditService', () => {
 
 	describe('getByEntity', () => {
 		it('returns logs for specific entity', () => {
+			expect.assertions(6);
 			// Create 2 logs for entity A
 			auditService.log({
 				userId: TEST_USER_ID,

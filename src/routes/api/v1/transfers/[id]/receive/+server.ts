@@ -3,6 +3,7 @@ import { requireAuth, requireWarehouseAccess } from '$lib/server/auth/guards';
 import { canManage, type Role } from '$lib/server/auth/rbac';
 import { receiveTransferSchema } from '$lib/validators/transfer';
 import { transferService } from '$lib/server/services/transfers';
+import { auditService } from '$lib/server/services/audit';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
@@ -30,6 +31,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	try {
 		const result = transferService.receive(params.id, user.id, parsed.data);
+		auditService.log({
+			userId: user.id,
+			action: 'transfer',
+			entityType: 'transfer',
+			entityId: params.id,
+			oldValues: { status: 'shipped' },
+			newValues: { status: result.status }
+		});
 		return json({ data: result });
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';

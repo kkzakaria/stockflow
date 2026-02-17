@@ -3,6 +3,7 @@ import { requireAuth } from '$lib/server/auth/guards';
 import { canApprove, type Role } from '$lib/server/auth/rbac';
 import { rejectTransferSchema } from '$lib/validators/transfer';
 import { transferService } from '$lib/server/services/transfers';
+import { auditService } from '$lib/server/services/audit';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
@@ -24,6 +25,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	try {
 		const result = transferService.reject(params.id, user.id, parsed.data.reason);
+		auditService.log({
+			userId: user.id,
+			action: 'transfer',
+			entityType: 'transfer',
+			entityId: params.id,
+			oldValues: { status: 'pending' },
+			newValues: { status: 'rejected' }
+		});
 		return json({ data: result });
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : '';
