@@ -1,8 +1,15 @@
 /**
  * Seed script for StockFlow demo data.
  *
- * Usage: DATABASE_URL=local.db npx tsx scripts/seed.ts
- * Requires: dev server running on localhost:5173 (for user creation via Better Auth API)
+ * WARNING: This script deletes ALL existing data before inserting demo data.
+ * Do not run against a production database.
+ *
+ * Usage: pnpm db:seed
+ * (or manually: DATABASE_URL=local.db npx tsx scripts/seed.ts)
+ *
+ * Requires: dev server running on localhost:5173 (for user creation via Better Auth API).
+ * Users are created through the API because Better Auth manages password hashing
+ * and account/session setup that cannot be easily replicated with raw SQL.
  */
 
 import Database from 'better-sqlite3';
@@ -23,7 +30,8 @@ if (!DATABASE_URL) {
 const sqlite = new Database(DATABASE_URL);
 sqlite.pragma('foreign_keys = ON');
 
-// Patch Statement prototype for Date/boolean coercion (same as db/index.ts)
+// Patch Statement prototype for Date/boolean coercion (duplicated from src/lib/server/db/index.ts).
+// If you modify this logic, update the other copy as well.
 const dummyStmt = sqlite.prepare('SELECT 1');
 const StmtProto = Object.getPrototypeOf(dummyStmt);
 
@@ -58,7 +66,7 @@ function ago(days: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Clean existing data (FK-safe order)
+// 1. Clean existing data (FKs disabled during deletion)
 // ---------------------------------------------------------------------------
 
 function cleanDatabase() {
@@ -82,10 +90,13 @@ function cleanDatabase() {
 		'user'
 	];
 	sqlite.pragma('foreign_keys = OFF');
-	for (const table of tables) {
-		sqlite.exec(`DELETE FROM "${table}"`);
+	try {
+		for (const table of tables) {
+			sqlite.exec(`DELETE FROM "${table}"`);
+		}
+	} finally {
+		sqlite.pragma('foreign_keys = ON');
 	}
-	sqlite.pragma('foreign_keys = ON');
 	console.log('  Done.');
 }
 
@@ -147,7 +158,13 @@ async function createUsers(): Promise<Record<string, string>> {
 		}
 
 		// Update role via direct SQL (Better Auth API doesn't support custom fields on sign-up)
-		sqlite.exec(`UPDATE "user" SET role = '${u.role}' WHERE id = '${userId}'`);
+		const roleResult = sqlite
+			.prepare(`UPDATE "user" SET role = ? WHERE id = ?`)
+			.run(u.role, userId);
+		if (roleResult.changes === 0) {
+			console.error(`  ERROR: Failed to update role for user ${userId} (${u.email})`);
+			process.exit(1);
+		}
 
 		userIds[u.email] = userId;
 		console.log(`  Created ${u.name} (${u.role}) -> ${userId}`);
@@ -714,9 +731,11 @@ function insertTransfers(
 			.run();
 
 		// Decrement stock at source
-		sqlite.exec(
-			`UPDATE product_warehouse SET quantity = quantity - ${item.qty} WHERE product_id = '${productMap[item.productKey].id}' AND warehouse_id = '${warehouseIds['dakar_centre']}'`
-		);
+		sqlite
+			.prepare(
+				`UPDATE product_warehouse SET quantity = quantity - ? WHERE product_id = ? AND warehouse_id = ?`
+			)
+			.run(item.qty, productMap[item.productKey].id, warehouseIds['dakar_centre']);
 	}
 	console.log('  Transfer 3 (shipped): Dakar Centre -> Saint-Louis (stock decremented)');
 
@@ -765,9 +784,11 @@ function insertTransfers(
 			createdAt: ago(10)
 		})
 		.run();
-	sqlite.exec(
-		`UPDATE product_warehouse SET quantity = quantity - ${t4Qty} WHERE product_id = '${productMap['vis_50mm'].id}' AND warehouse_id = '${warehouseIds['thies']}'`
-	);
+	sqlite
+		.prepare(
+			`UPDATE product_warehouse SET quantity = quantity - ? WHERE product_id = ? AND warehouse_id = ?`
+		)
+		.run(t4Qty, productMap['vis_50mm'].id, warehouseIds['thies']);
 
 	// Stock in at Dakar Port
 	db.insert(schema.movements)
@@ -1049,35 +1070,22 @@ async function main() {
 	// Step 1: Clean
 	cleanDatabase();
 
-	// Step 2: Users (via HTTP API)
+	// Step 2: Users (via HTTP API — must be outside transaction since it's async/HTTP)
 	const userIds = await createUsers();
 
-	// Step 3: Warehouses
-	const warehouseIds = insertWarehouses();
-
-	// Step 4: User-Warehouse assignments
-	insertUserWarehouses(userIds, warehouseIds);
-
-	// Step 5: Categories
-	const categoryIds = insertCategories();
-
-	// Step 6: Products
-	const productMap = insertProducts(categoryIds);
-
-	// Step 7: Stock levels + initial movements
-	insertStock(productMap, warehouseIds, userIds['karim@stockflow.com']);
-
-	// Step 8: Transfers
-	const transferIds = insertTransfers(productMap, warehouseIds, userIds);
-
-	// Step 9: Inventory session
-	insertInventory(productMap, warehouseIds, userIds);
-
-	// Step 10: Alerts
-	insertAlerts(productMap, warehouseIds, userIds, transferIds);
-
-	// Step 11: Audit logs
-	insertAuditLogs(userIds, productMap, transferIds);
+	// Steps 3-11: All synchronous DB inserts wrapped in a transaction for atomicity
+	const seedData = sqlite.transaction(() => {
+		const warehouseIds = insertWarehouses();
+		insertUserWarehouses(userIds, warehouseIds);
+		const categoryIds = insertCategories();
+		const productMap = insertProducts(categoryIds);
+		insertStock(productMap, warehouseIds, userIds['karim@stockflow.com']);
+		const transferIds = insertTransfers(productMap, warehouseIds, userIds);
+		insertInventory(productMap, warehouseIds, userIds);
+		insertAlerts(productMap, warehouseIds, userIds, transferIds);
+		insertAuditLogs(userIds, productMap, transferIds);
+	});
+	seedData();
 
 	console.log('\n=== Seed complete! ===');
 	console.log('\nDemo accounts:');
@@ -1086,7 +1094,10 @@ async function main() {
 	}
 }
 
-main().catch((err) => {
-	console.error('Seed failed:', err);
-	process.exit(1);
-});
+main()
+	.then(() => sqlite.close())
+	.catch((err) => {
+		console.error('Seed failed:', err);
+		sqlite.close();
+		process.exit(1);
+	});
